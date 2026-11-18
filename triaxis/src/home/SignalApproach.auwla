@@ -1,0 +1,41 @@
+<style>
+  .approach {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    gap: 1.25rem 3rem;
+    padding: clamp(2rem, 5vw, 5rem) var(--gutter);
+    border-top: 1px solid var(--rule);
+    background: #f8f4ec;
+  }
+
+  .approach h2 {
+    margin: 0;
+    font-size: clamp(1.6rem, 3.5vw, 3.5rem);
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: -.05em;
+  }
+
+  .approach p {
+    max-width: 42ch;
+    margin: 0;
+    color: var(--muted-ink);
+    line-height: 1.5;
+  }
+
+  @media (max-width: 36rem) {
+    .approach {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+export function SignalApproach() {
+  return (
+    <section class="approach" id="approach" aria-labelledby="approach-heading">
+      <h2 id="approach-heading">"How signals are reviewed"</h2>
+      <p>"Analysts review each trade idea. Entry, stop and target levels have to pass a set of checks before a signal can be published."</p>
+    </section>
+  );
+}

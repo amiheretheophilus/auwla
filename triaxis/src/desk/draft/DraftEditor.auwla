@@ -1,0 +1,111 @@
+import { saveSignalDraft } from '#server-functions';
+import type { SignalDraft } from './model/signal-review';
+import { PricePlan } from './fields/PricePlan.auwla';
+import { SignalChecks } from './SignalChecks.auwla';
+import { TradeDetails } from './fields/TradeDetails.auwla';
+
+<style>
+  .editor {
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .draft-form {
+    display: grid;
+    gap: 1.1rem;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: .75rem 1.25rem;
+    padding: 1rem 0;
+  }
+
+  .actions p { margin: 0; color: var(--desk-muted); line-height: 1.4; }
+
+  .save {
+    padding: .85rem 1.2rem;
+    border: 0;
+    border-radius: .5rem;
+    background: var(--desk-accent);
+    color: white;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .save:disabled { opacity: .65; cursor: wait; }
+
+  .note {
+    padding: .95rem var(--panel-padding);
+    border: 1px solid var(--desk-rule);
+    border-radius: var(--panel-radius);
+    background: var(--desk-surface);
+  }
+
+  .note summary { cursor: pointer; }
+
+  .note textarea {
+    box-sizing: border-box;
+    width: 100%;
+    margin-top: .75rem;
+    padding: .75rem;
+    border: 1px solid var(--desk-rule);
+    border-radius: .45rem;
+    background: var(--desk-input);
+    color: inherit;
+    font: inherit;
+    resize: vertical;
+  }
+</style>
+
+export function DraftEditor({ initial }: { initial: SignalDraft }) {
+  let revision = initial.revision;
+
+  const save = $forms((fields: FormData) => {
+    const draft: Record<string, unknown> = Object.fromEntries(fields);
+    delete draft.target;
+    draft.targets = fields.getAll('target');
+    const result = saveSignalDraft(revision, draft);
+
+    $track(save).onSuccess(outcome => {
+      if (outcome.ok) revision = outcome.draft.revision;
+    });
+
+    return result;
+  });
+
+  const review = save.result?.ok ? save.result.draft.review : initial.review;
+
+  return (
+    <div class="editor">
+      <form class="draft-form" onSubmit={save.submit}>
+        <TradeDetails fields={initial.fields} />
+        <PricePlan fields={initial.fields} />
+        <details class="note" open={Boolean(initial.fields.note)}>
+          <summary>"Analyst note"</summary>
+          <textarea name="note" aria-label="Analyst note" rows={3} maxlength={500} value={initial.fields.note} />
+        </details>
+
+        <div class="actions">
+          <button class="save" type="submit" disabled={save.pending}>
+            save.pending ? "Saving…" : "Save draft"
+          </button>
+          if (save.result?.ok) {
+            <p role="status">"Draft saved. Checks updated."</p>
+          } else if (save.result) {
+            <p role="alert">save.result.message</p>
+          } else if (save.errors.length > 0) {
+            <p role="alert">"The draft could not be saved. Check your session and try again."</p>
+          } else if (initial.updatedAt) {
+            <p role="status">"Saved draft reopened."</p>
+          }
+        </div>
+      </form>
+
+      <SignalChecks review={review} />
+    </div>
+  );
+}

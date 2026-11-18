@@ -1,0 +1,119 @@
+import { getMarketAxes } from '#server-functions';
+
+<style>
+  .market-coverage {
+    display: grid;
+    grid-template-columns: 1fr 3fr;
+    border-top: 1px solid var(--rule);
+  }
+
+  .market-coverage h2 {
+    margin: 0;
+    padding: 1.85rem var(--gutter);
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--accent);
+  }
+
+  .market-axes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .market-axis {
+    padding: 1.75rem clamp(1rem, 3vw, 3rem);
+    border-left: 1px solid var(--rule);
+  }
+
+  .market-axis h3 {
+    margin: 0;
+    font-size: clamp(1.2rem, 2.3vw, 2rem);
+    font-weight: 400;
+    letter-spacing: -.04em;
+  }
+
+  .market-axis h3::before {
+    display: block;
+    width: .5rem;
+    height: .5rem;
+    margin-bottom: .85rem;
+    background: var(--axis-color);
+    border-radius: 50%;
+    content: "";
+  }
+
+  .market-axis[data-axis="forex"] {
+    --axis-color: #3987e5;
+  }
+
+  .market-axis[data-axis="crypto"] {
+    --axis-color: #9085e9;
+  }
+
+  .market-axis[data-axis="synthetics"] {
+    --axis-color: #eda100;
+  }
+
+  .market-axis p {
+    margin: .5rem 0 0;
+    color: var(--muted-ink);
+    font-size: .875rem;
+    line-height: 1.5;
+  }
+
+  @media (max-width: 55rem) {
+    .market-coverage {
+      grid-template-columns: 1fr;
+    }
+
+    .market-coverage h2 {
+      padding-block: 1.25rem;
+      border-bottom: 1px solid var(--rule);
+    }
+
+    .market-axis:first-child {
+      border-left: 0;
+    }
+  }
+
+  @media (max-width: 36rem) {
+    .market-axes {
+      grid-template-columns: 1fr;
+    }
+
+    .market-axis {
+      padding: 1rem var(--gutter);
+      border-left: 0;
+    }
+
+    .market-axis + .market-axis {
+      border-top: 1px solid var(--rule);
+    }
+
+    .market-axis h3::before {
+      display: inline-block;
+      margin: 0 .6rem .12em 0;
+    }
+  }
+</style>
+
+export function MarketCoverage() {
+  const axes = getMarketAxes();
+
+  return (
+    <section class="market-coverage" id="markets" aria-labelledby="market-heading">
+      <h2 id="market-heading">"Market coverage"</h2>
+      <ul class="market-axes">
+        for (const axis of axes) {
+          <li key={axis.id} class="market-axis" data-axis={axis.id}>
+            <h3>axis.name</h3>
+            <p>axis.instruments</p>
+          </li>
+        }
+      </ul>
+    </section>
+  );
+}

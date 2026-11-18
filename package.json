@@ -8,7 +8,8 @@
   },
   "workspaces": [
     "packages/*",
-    "examples/octopulse"
+    "examples/octopulse",
+    "triaxis"
   ],
   "scripts": {
     "test": "bun run test:root && bun run test:adapters && bun run test:data && bun run test:utils && bun run test:devtools && bun run test:router && bun run test:server && bun run test:language-service && bun run test:vite && bun run test:bench",

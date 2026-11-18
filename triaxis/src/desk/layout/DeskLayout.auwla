@@ -1,0 +1,92 @@
+import { DraftEditor } from '../draft/DraftEditor.auwla';
+import { SignInForm } from '../auth/SignInForm.auwla';
+import type { SignalDraft } from '../draft/model/signal-review';
+
+<style>
+  .desk {
+    --desk-ink: #27211d;
+    --desk-muted: #625850;
+    --desk-rule: #d5cabe;
+    --desk-paper: #f1ebe1;
+    --desk-surface: #faf6ef;
+    --desk-input: #fffcf6;
+    --desk-accent: #a8271c;
+    --desk-gutter: clamp(1rem, 4vw, 4rem);
+    --panel-padding: clamp(1rem, 2.4vw, 2rem);
+    --panel-radius: .85rem;
+    min-height: 100vh;
+    background: var(--desk-paper);
+    color: var(--desk-ink);
+    font-family: "Helvetica Neue", Arial, sans-serif;
+  }
+
+  .desk-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 3.65rem;
+    padding-inline: var(--desk-gutter);
+    border-bottom: 1px solid var(--desk-rule);
+  }
+
+  .desk-header a {
+    color: inherit;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-decoration: none;
+    text-transform: uppercase;
+  }
+
+  .desk-header button {
+    padding: .45rem .7rem;
+    border: 1px solid var(--desk-rule);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .desk-main {
+    max-width: 72rem;
+    margin-inline: auto;
+    padding: clamp(2rem, 4vw, 4rem) var(--desk-gutter);
+  }
+  h1 {
+    margin: 0 0 1.5rem;
+    font-size: clamp(2.45rem, 4.8vw, 4.5rem);
+    font-weight: 400;
+    letter-spacing: -.075em;
+    line-height: 1;
+  }
+
+  .risk-note {
+    margin: 2rem 0 0;
+    color: var(--desk-muted);
+    font-size: .85rem;
+  }
+</style>
+
+export function DeskLayout({ draft, enabled }: { draft: SignalDraft | null; enabled: boolean }) {
+  return (
+    <div class="desk">
+      <header class="desk-header">
+        <a href="/">"Triaxis"</a>
+        if (draft) {
+          <form method="post" action="/desk/sign-out">
+            <button type="submit">"Sign out"</button>
+          </form>
+        }
+      </header>
+
+      <main class="desk-main">
+        <h1>"Analyst desk"</h1>
+        if (draft) {
+          <DraftEditor initial={draft} />
+        } else {
+          <SignInForm enabled={enabled} />
+        }
+        <p class="risk-note">"Trading involves risk. Signals are for informational purposes only."</p>
+      </main>
+    </div>
+  );
+}

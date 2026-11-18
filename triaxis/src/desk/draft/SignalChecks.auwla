@@ -1,0 +1,57 @@
+import type { SignalReview } from './model/signal-review';
+
+<style>
+  .checks {
+    padding: 1.35rem var(--panel-padding);
+    border: 1px solid var(--desk-rule);
+    border-radius: var(--panel-radius);
+    background: var(--desk-surface);
+  }
+  .checks h2 { margin: 0; font-size: 1.15rem; font-weight: 600; letter-spacing: -.025em; }
+  .result { margin: .5rem 0 1.25rem; color: var(--desk-accent); }
+  .missing { margin: 0 0 1.25rem; color: var(--desk-muted); }
+  .checks ol {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .checks li { padding: .85rem 0; border-top: 1px solid var(--desk-rule); }
+  .check-row { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+  .check-row strong { font-size: 1rem; font-weight: 600; }
+  .check-row span { font-size: .8rem; color: var(--desk-muted); }
+  .check-row span[data-status="pass"] { color: #256448; }
+  .check-row span[data-status="fail"] { color: var(--desk-accent); }
+  .check-row span[data-status="warning"] { color: #815107; }
+  .check-detail { margin: .35rem 0 0; color: var(--desk-muted); font-size: .88rem; line-height: 1.4; overflow-wrap: anywhere; }
+  @media (max-width: 40rem) {
+    .checks ol { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  }
+</style>
+
+const statusLabels = { pass: 'Pass', warning: 'Warning', fail: 'Fail', pending: 'Pending' };
+
+export function SignalChecks({ review }: { review: SignalReview }) {
+  return (
+    <section class="checks" aria-labelledby="checks-heading">
+      <h2 id="checks-heading">"Draft checks"</h2>
+      <p class="result" role="status">review.verdict</p>
+      if (review.missing.length > 0) {
+        <p class="missing">"Missing: " review.missing.join(', ')</p>
+      }
+      <ol>
+        for (const check of review.checks) {
+          <li key={check.label}>
+            <div class="check-row">
+              <strong>check.label</strong>
+              <span data-status={check.status}>statusLabels[check.status]</span>
+            </div>
+            <p class="check-detail">check.detail</p>
+          </li>
+        }
+      </ol>
+    </section>
+  );
+}

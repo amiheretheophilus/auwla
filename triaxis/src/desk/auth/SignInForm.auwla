@@ -1,0 +1,75 @@
+import { navigate } from '@memoized-dom/router';
+import { login } from '#server-functions';
+
+<style>
+  .sign-in {
+    display: grid;
+    gap: .8rem;
+    width: min(100%, 23rem);
+  }
+
+  .sign-in input {
+    box-sizing: border-box;
+    padding: .8rem;
+    border: 1px solid var(--desk-rule);
+    border-radius: 0;
+    background: var(--desk-surface);
+    color: inherit;
+    font: inherit;
+  }
+
+  .sign-in button {
+    justify-self: start;
+    padding: .8rem 1.1rem;
+    border: 0;
+    background: var(--desk-accent);
+    color: white;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .sign-in button:disabled {
+    opacity: .65;
+    cursor: default;
+  }
+
+  .sign-in p {
+    margin: 0;
+    color: var(--desk-muted);
+    line-height: 1.4;
+  }
+
+  .sign-in [role="alert"] {
+    color: var(--desk-accent);
+  }
+</style>
+
+export function SignInForm({ enabled }: { enabled: boolean }) {
+  const form = $forms((fields: FormData) => {
+    const email = String(fields.get('email') ?? '').trim();
+    const password = String(fields.get('password') ?? '');
+    const request = login(email, password);
+    $track(form).onSuccess(() => {
+      navigate('/desk', { replace: true });
+    });
+    return request;
+  });
+
+  return (
+    <form class="sign-in" method="post" onSubmit={form.submit}>
+      <label for="desk-email">"Staff email"</label>
+      <input id="desk-email" name="email" type="email" autocomplete="username" maxlength={254} required />
+      <label for="desk-password">"Password"</label>
+      <input id="desk-password" name="password" type="password" autocomplete="current-password" maxlength={128} required />
+      <button type="submit" disabled={form.pending}>
+        form.pending ? "Signing in…" : "Sign in"
+      </button>
+      if (!enabled && form.errors.length === 0) {
+        <p>"Run the local auth setup and restart the dev server to enable sign-in."</p>
+      }
+      if (form.errors.length > 0) {
+        <p role="alert">form.errors[0]?.message</p>
+      }
+    </form>
+  );
+}

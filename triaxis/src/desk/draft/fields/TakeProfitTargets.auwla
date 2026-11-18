@@ -1,0 +1,91 @@
+<style>
+  .targets {
+    padding: 1.35rem var(--panel-padding);
+    min-width: 0;
+  }
+
+  .targets header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem 1rem;
+    margin-bottom: 1rem;
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 600;
+    letter-spacing: -.025em;
+  }
+
+  ol { display: grid; gap: .65rem; margin: 0; padding: 0; list-style: none; }
+  li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .6rem; }
+  label { display: grid; grid-template-columns: 3ch minmax(0, 1fr); align-items: center; gap: .75rem; }
+  label span { color: var(--desk-muted); font-size: .875rem; }
+
+  input {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 2.85rem;
+    padding: .65rem .75rem;
+    border: 1px solid var(--desk-rule);
+    border-radius: .45rem;
+    background: var(--desk-input);
+    color: inherit;
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+  }
+
+  button {
+    padding: .45rem .65rem;
+    border: 1px solid var(--desk-rule);
+    border-radius: .45rem;
+    background: var(--desk-input);
+    color: var(--desk-accent);
+    font: inherit;
+    font-size: .85rem;
+    cursor: pointer;
+  }
+
+  button:disabled { opacity: .45; cursor: default; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--desk-accent); outline-offset: 2px; }
+</style>
+
+interface TargetRow {
+  id: number;
+  label: string;
+  value: string;
+}
+
+interface TargetsProps {
+  targets: TargetRow[];
+  addTarget: () => void;
+  removeTarget: (id: number) => void;
+  setTarget: (id: number, value: string) => void;
+}
+
+export function TakeProfitTargets({ targets, addTarget, removeTarget, setTarget }: TargetsProps) {
+  return (
+    <section class="targets" aria-labelledby="targets-heading">
+      <header>
+        <h2 id="targets-heading">"Take-profit targets"</h2>
+        <button type="button" onClick={addTarget}>"Add target"</button>
+      </header>
+      <ol>
+        for (const target of targets) {
+          <li key={target.id}>
+            <label>
+              <span>target.label</span>
+              <input name="target" inputmode="decimal" maxlength={64} value={target.value}
+                onInput={(event) => setTarget(target.id, event.currentTarget.value)} />
+            </label>
+            <button type="button" disabled={targets.length === 1} aria-label={'Remove ' + target.label}
+              onClick={() => removeTarget(target.id)}>"Remove"</button>
+          </li>
+        }
+      </ol>
+    </section>
+  );
+}

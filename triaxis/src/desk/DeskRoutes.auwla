@@ -1,0 +1,22 @@
+import { redirectRoute } from '@memoized-dom/router';
+import { authConfigured, isAnalyst } from '#server/auth/auth';
+import { loadDraft } from '#server/desk/draft';
+import { DeskLayout } from './layout/DeskLayout.auwla';
+
+export function AnalystDesk() {
+  const draft = $routed(async ({ request }) => {
+    if (!await isAnalyst(request)) return redirectRoute('/desk/sign-in');
+    return loadDraft();
+  });
+
+  return <DeskLayout draft={draft} enabled={true} />;
+}
+
+export function DeskSignIn() {
+  const enabled = $routed(async ({ request }) => {
+    if (await isAnalyst(request)) return redirectRoute('/desk');
+    return authConfigured();
+  });
+
+  return <DeskLayout draft={null} enabled={enabled} />;
+}

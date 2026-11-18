@@ -1,0 +1,30 @@
+{
+  "name": "triaxis",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "memoized-dom dev",
+    "types": "memoized-dom types",
+    "check": "bun run types && tsc -p tsconfig.json --runExternalCode",
+    "build": "memoized-dom build",
+    "start": "NODE_ENV=production bun dist/server.js",
+    "auth:setup": "bun server/auth/setup.ts"
+  },
+  "dependencies": {
+    "@memoized-dom/data": "workspace:*",
+    "@memoized-dom/router": "workspace:*",
+    "@memoized-dom/runtime": "workspace:*",
+    "@memoized-dom/server": "workspace:*",
+    "@neondatabase/serverless": "^1.0.0",
+    "better-auth": "^1.7.25",
+    "hono": "^4.13.13"
+  },
+  "devDependencies": {
+    "@memoized-dom/jsx-plus": "workspace:*",
+    "@memoized-dom/vite": "workspace:*",
+    "@types/bun": "^1.4.4",
+    "@types/node": "^26.5.1",
+    "typescript": "7.1.0-beta",
+    "vite": "^8.3.8"
+  }
+}

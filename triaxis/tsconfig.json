@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "jsx": "preserve",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["@memoized-dom/jsx-plus/types", "bun", "node", "vite/client"],
+    "paths": {
+      "@memoized-dom/compiler/jsx": ["../packages/compiler/src/jsx-types.ts"],
+      "#server/*": ["./server/*"],
+      "#server-functions": ["./.memoized/server-functions.d.ts"]
+    }
+  },
+  "contentMappers": [
+    { "package": "@memoized-dom/jsx-plus", "extensions": [".auwla"] }
+  ],
+  "include": ["src", "server", "server.ts", "vite.config.ts"]
+}

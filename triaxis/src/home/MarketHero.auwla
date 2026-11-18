@@ -1,0 +1,140 @@
+<style>
+  .market-hero {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    min-height: clamp(30rem, 44vw, 46rem);
+    overflow: hidden;
+    background: #e8d9c6;
+  }
+
+  .market-hero__image {
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 55%;
+  }
+
+  /* Keep the text legible where it crosses the photograph. */
+  .market-hero::before {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      linear-gradient(0deg, #eae0d2 0%, #eae0d200 36%),
+      linear-gradient(90deg, #eee5d7d9 0%, #eee5d74d 36%, #eee5d700 60%);
+    content: "";
+  }
+
+  .market-hero__content {
+    display: grid;
+    justify-items: start;
+    align-content: space-between;
+    gap: clamp(1.5rem, 3vw, 3rem);
+    padding: clamp(2rem, 5vw, 5rem) var(--gutter) clamp(1.5rem, 4.4vw, 4rem);
+  }
+
+  .market-hero h1 {
+    grid-row: 3;
+    margin: 0;
+    font-size: clamp(4rem, 11vw, 12.5rem);
+    font-weight: 400;
+    line-height: .89;
+    letter-spacing: -.07em;
+  }
+
+  .market-hero p {
+    grid-row: 1;
+    margin: 0;
+    font-size: clamp(1.55rem, 2.7vw, 2.65rem);
+    line-height: 1.02;
+    letter-spacing: -.05em;
+  }
+
+  .market-hero p span {
+    display: block;
+  }
+
+  .market-hero__link {
+    box-sizing: border-box;
+    grid-row: 2;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: .4rem;
+    width: clamp(6rem, 9vw, 8rem);
+    aspect-ratio: 1;
+    padding: .75rem;
+    border: 1px solid #fff9f0aa;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff9f0;
+    text-align: center;
+    text-decoration: none;
+    font-size: clamp(.8rem, 1.12vw, 1rem);
+    line-height: 1.08;
+    transition: background-color .15s ease;
+  }
+
+  .market-hero__link:hover {
+    background: #8a2119;
+  }
+
+  .market-hero__link:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 4px;
+  }
+
+  .market-hero__link span {
+    font-size: 1.1em;
+  }
+
+  @media (max-width: 42rem) {
+    .market-hero {
+      min-height: clamp(27rem, 118vw, 34rem);
+    }
+
+    .market-hero__image {
+      object-position: 65% center;
+    }
+
+    .market-hero::before {
+      background:
+        linear-gradient(0deg, #eae0d2 0%, #eae0d2bb 18%, transparent 47%),
+        linear-gradient(90deg, #eee5d7ec 0%, #eee5d766 35%, transparent 65%);
+    }
+
+    .market-hero h1 {
+      font-size: clamp(3.15rem, 13.5vw, 5.5rem);
+    }
+  }
+</style>
+
+export function MarketHero() {
+  return (
+    <section class="market-hero" aria-labelledby="hero-heading">
+      <img
+        class="market-hero__image"
+        src="/images/market-axes.webp"
+        alt=""
+        width={1536}
+        height={1024}
+        fetchpriority="high"
+      />
+      <div class="market-hero__content">
+        <h1 id="hero-heading">"Market signals"</h1>
+        <p>
+          <span>"Three markets."</span>
+          <span>"One signal desk."</span>
+        </p>
+        <a class="market-hero__link" href="#markets">
+          "Explore markets"
+          <span aria-hidden="true">"↓"</span>
+        </a>
+      </div>
+    </section>
+  );
+}
