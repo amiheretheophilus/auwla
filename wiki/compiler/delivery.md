@@ -191,9 +191,16 @@ and no handler has heard the user yet. So after the render, each such control it
 user's value back and reports it as the user's input would have: `input`, and `change` for a box,
 a radio or a select. Its handlers then update state (`tests/delivery/adopt.test.ts`).
 
-The cost is that numbered nodes leave the document for a moment, within one task, before any paint.
-Focus, the window's scroll, each element's scroll and a playing medium's time and state are restored
-(`rememberDetachedState`). An iframe inside a region, component or row loads its page again, which
+The cost is that numbered nodes leave the document for a moment, within one task. That is not
+before every paint: the browser paints the server's HTML before the module script runs. Focus, the
+window's scroll, each element's scroll and a playing medium's time and state are restored
+(`rememberDetachedState`), and so is how far each CSS animation has run (`rememberAnimations`).
+A browser starts an element's CSS animations again when the element is put back, so before
+2026-11-18 a page with entrance animations played them once on the server's paint and again from
+the start when the program adopted it (found on the Triaxis landing page). Animations on a scroll
+timeline follow the scroll and are left alone; a transition is not restarted, the element just
+arrives at its final style. `tests/markup.test.ts` in the runtime checks the restore with a stand-in
+`getAnimations`, since Happy DOM runs no animations. An iframe inside a region, component or row loads its page again, which
 script cannot prevent; this is a decision for the user (`../open-issues.md`).
 
 `mount` adopts when the root range holds a numbered node (`carriesCreations`, `hydrate-program.ts`),

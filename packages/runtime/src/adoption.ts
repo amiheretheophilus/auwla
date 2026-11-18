@@ -317,12 +317,76 @@ export function carriesCreations(open: Node): boolean {
   return false;
 }
 
+/** The parts of a CSS animation (`CSSAnimation`) adoption reads, without needing DOM types. */
+interface RunningAnimation {
+  readonly animationName?: unknown;
+  readonly timeline: unknown;
+  readonly effect: { readonly target?: Element | null; readonly pseudoElement?: string | null } | null;
+  currentTime: unknown;
+}
+
+interface AnimatedDocument {
+  readonly timeline?: unknown;
+  getAnimations?(): RunningAnimation[];
+}
+
 /**
- * What detaching a node loses, for the elements in [open, end]: an element's scroll position and
- * a playing medium's time. Returns what puts them back on the elements still in the page. An
- * iframe loads its page again when it is moved, which nothing can prevent.
+ * The CSS animations playing on the elements in [open, end], with how far each has run.
+ * A detached element loses its CSS animations, and when it is put back the browser starts
+ * them again from the beginning: the page the server painted animates once, then again as
+ * the program adopts it. Animations on a scroll timeline follow the scroll rather than the
+ * clock, so they resume by themselves and are left alone. A transition is not restarted by
+ * the browser (the element simply arrives at its final style), so it needs nothing either.
+ */
+function rememberAnimations(open: Node, end: Node): () => void {
+  const document = open.ownerDocument as unknown as AnimatedDocument | null;
+  if (typeof document?.getAnimations !== 'function') return () => undefined;
+  const inRange = (target: Node): boolean => (open.compareDocumentPosition(target) & 4) !== 0
+    && (end.compareDocumentPosition(target) & 2) !== 0;
+  // An element's animations of one name, by element, then by pseudo-element and name.
+  const keyOf = (animation: RunningAnimation) => `${animation.effect?.pseudoElement ?? ''}|${String(animation.animationName)}`;
+  const clocked = (animation: RunningAnimation): animation is RunningAnimation & { effect: { target: Element } } =>
+    typeof animation.animationName === 'string' && animation.timeline === document.timeline
+    && animation.effect?.target != null;
+
+  const saved = new Map<Element, Map<string, number[]>>();
+  for (const animation of document.getAnimations()) {
+    if (!clocked(animation) || typeof animation.currentTime !== 'number' || !inRange(animation.effect.target)) continue;
+    const target = animation.effect.target;
+    const byKey = saved.get(target) ?? new Map<string, number[]>();
+    saved.set(target, byKey);
+    const times = byKey.get(keyOf(animation)) ?? [];
+    byKey.set(keyOf(animation), times);
+    times.push(animation.currentTime);
+  }
+  if (saved.size === 0) return () => undefined;
+
+  return () => {
+    // Reading the animations brings the page's style up to date, so the restarted ones exist.
+    const taken = new Map<Element, Map<string, number>>();
+    for (const animation of document.getAnimations!()) {
+      if (!clocked(animation)) continue;
+      const target = animation.effect.target;
+      const times = saved.get(target)?.get(keyOf(animation));
+      if (times === undefined || !target.isConnected) continue;
+      const used = taken.get(target) ?? new Map<string, number>();
+      taken.set(target, used);
+      const index = used.get(keyOf(animation)) ?? 0;
+      used.set(keyOf(animation), index + 1);
+      const time = times[index];
+      if (time !== undefined && animation.currentTime !== time) animation.currentTime = time;
+    }
+  };
+}
+
+/**
+ * What detaching a node loses, for the elements in [open, end]: an element's scroll position,
+ * a playing medium's time and how far each CSS animation has run (`rememberAnimations`). Returns
+ * what puts them back on the elements still in the page. An iframe loads its page again when it
+ * is moved, which nothing can prevent.
  */
 function rememberDetachedState(open: Node, end: Node): () => void {
+  const restoreAnimations = rememberAnimations(open, end);
   const scrolled: [Element, number, number][] = [];
   const media: [HTMLMediaElement, number, boolean][] = [];
   const visit = (node: Node | null, stop: Node | null): void => {
@@ -348,6 +412,7 @@ function rememberDetachedState(open: Node, end: Node): () => void {
       // `play` reports a refusal through its promise, which is the browser's to decide.
       if (!paused && medium.paused) void medium.play?.()?.catch?.(() => undefined);
     }
+    restoreAnimations();
   };
 }
 

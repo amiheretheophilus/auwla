@@ -122,3 +122,61 @@ it('keeps a scrolled element where it was while its nodes are detached and taken
     host.remove();
   });
 });
+
+/**
+ * Happy DOM runs no CSS animations, so `getAnimations` plays the browser's part: an element
+ * detached and put back gets new animation objects that start again from 0.
+ */
+function fakeAnimations(target: Document) {
+  type Fake = { animationName: string; timeline: unknown; effect: { target: Element; pseudoElement: string | null }; currentTime: number };
+  const scrollTimeline = {};
+  let playing: Fake[] = [];
+  const play = (element: Element, animationName: string, currentTime: number, pseudoElement: string | null = null, timeline: unknown = target.timeline) => {
+    playing.push({ animationName, timeline, effect: { target: element, pseudoElement }, currentTime });
+  };
+  const restartAll = () => {
+    playing = playing.map((animation) => ({ ...animation, effect: { ...animation.effect }, currentTime: 0 }));
+  };
+  Object.defineProperty(target, 'getAnimations', { configurable: true, value: () => playing });
+  return {
+    play, restartAll, scrollTimeline,
+    timeOf: (element: Element, name: string, pseudo: string | null = null) =>
+      playing.find((animation) => animation.effect.target === element && animation.animationName === name && animation.effect.pseudoElement === pseudo)!.currentTime,
+    uninstall: () => { delete (target as unknown as Record<string, unknown>).getAnimations; },
+  };
+}
+
+it('keeps CSS animations where they were while their elements are detached and taken back', () => {
+  runWithApplicationRuntime(createApplicationRuntime(), () => {
+    const host = document.createElement('div');
+    const outside = document.createElement('aside');
+    document.body.append(host, outside);
+    host.innerHTML = '<!--mmd:r:App--><!--[0--><h1><span>a</span></h1><!--/mmd-->';
+    const heading = host.querySelector('h1')!;
+    const word = host.querySelector('span')!;
+    const animations = fakeAnimations(document);
+    animations.play(word, 'rise', 400);
+    animations.play(heading, 'pulse', 900, '::before');
+    animations.play(heading, 'drift', 0.5, null, animations.scrollTimeline);
+    animations.play(outside, 'spin', 300);
+
+    const cache = createTemplateCache([['h1', 0, ['span', 0, 'a']]]);
+    runWithRenderEnvironment({ document: document as unknown as DocumentLike }, () => {
+      adoptRoot(host.firstChild!, host.lastChild!, () => {
+        host.append(cloneTemplate(cache));
+        // The browser restarts the animations of every element that was put back.
+        animations.restartAll();
+      });
+    });
+
+    expect(host.querySelector('span')).toBe(word);
+    expect(animations.timeOf(word, 'rise')).toBe(400);
+    expect(animations.timeOf(heading, 'pulse', '::before')).toBe(900);
+    // A scroll timeline follows the scroll, and an element outside the root was never detached.
+    expect(animations.timeOf(heading, 'drift')).toBe(0);
+    expect(animations.timeOf(outside, 'spin')).toBe(0);
+    animations.uninstall();
+    host.remove();
+    outside.remove();
+  });
+});
