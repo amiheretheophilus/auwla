@@ -246,7 +246,9 @@ So every reactive binding the compiler can see reaches a computation either as a
 static input or as a reported read. What stays unseen is state inside host APIs
 and uncompiled package code; like an unwritten global, it is not an input
 (`../decisions.md`, 2026-10-21). Packages that the compiler compiles (Phase 9)
-are visible code.
+are visible code. A call the program makes on a value such a package made does
+notify that value's readers (`../decisions.md`, 2026-11-18; `handlers.md`,
+"State a package keeps").
 
 Cost: one null check in escaping functions that read state, and version capture
 only for computations that contain unknown calls. Functions called directly

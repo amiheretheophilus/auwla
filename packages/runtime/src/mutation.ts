@@ -10,7 +10,7 @@ import { advanceWriteEpoch } from './write-epoch';
 import { recoveryHooks } from './recovery-hooks';
 import { isRefNode } from './refs';
 import { isBuilding, isEffectInvocation } from './build-scope';
-import { untracked } from './computation';
+import { tracking, untracked } from './computation';
 
 const arrayIsArray = Array.isArray;
 
@@ -652,8 +652,22 @@ function differs(prior: readonly unknown[], after: readonly unknown[]): boolean 
  * shallowly, or the read now gives another value. So one shallow snapshot per
  * reached object answers both questions: which reads to notify, and which
  * objects other roots may share.
+ *
+ * `packageReads` lists the reads holding a value an uncompiled package made
+ * (`compiler-next/src/features/handlers/package-values.ts`). Such a value can
+ * keep its state in a closure or a private field, where no snapshot sees it:
+ * `store.setState(…)` on a zustand store changes nothing the store object
+ * shows. Those reads are notified when the call ends whatever the snapshot
+ * says, and their readers compare what they read. Not while a computation runs:
+ * a render or an effect calling `store.getState()` would wake every other reader
+ * of the store, and two of them would keep waking each other.
  */
-export function observeMutation(reads: readonly (() => unknown)[], notify: readonly (() => void)[]): Observation {
+export function observeMutation(
+  reads: readonly (() => unknown)[],
+  notify: readonly (() => void)[],
+  packageReads?: readonly number[],
+): Observation {
+  let hidden = packageReads !== undefined && !tracking() ? packageReads : undefined;
   let activeReads = reads;
   let notifications = notify;
   let values: unknown[] = [];
@@ -703,6 +717,12 @@ export function observeMutation(reads: readonly (() => unknown)[], notify: reado
         if (differs(prior, after)) changed.add(object);
         objects.set(object, after);
       }
+      // A package's value counts as changed itself, so the roots holding it elsewhere (an
+      // imported store's module) are found as an edit's are.
+      for (const index of hidden ?? []) {
+        const value = activeReads[index]!();
+        if (value !== null && (typeof value === 'object' || typeof value === 'function')) changed.add(value);
+      }
       // Stamp before notifying: a notified owner can update synchronously.
       for (const object of changed) stamp(object);
       let moved = false;
@@ -710,8 +730,12 @@ export function observeMutation(reads: readonly (() => unknown)[], notify: reado
         const value = read();
         const replaced = !Object.is(value, values[index]);
         moved ||= replaced;
-        if (replaced || reachesAny(reached[index]!, changed)) notifications[index]!();
+        if (replaced || reachesAny(reached[index]!, changed) || hidden?.includes(index) === true) {
+          notifications[index]!();
+        }
       });
+      // Once: a recovery after a throw stands for the end of the call.
+      hidden = undefined;
       // A later recovery compares with what each read reaches now.
       if (!final && (moved || changed.size > 0)) observe();
       notifyAliases({ one: null, many: changed }, { kind: 'unknown' });

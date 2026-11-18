@@ -20,6 +20,39 @@ function store(object: object, key: PropertyKey, value: unknown): void {
   mutationTarget(object, key, () => {}).value = value;
 }
 
+/** A store whose state lives in a closure, as an uncompiled package's (zustand's) does. */
+function closureStore() {
+  let state = { count: 0 };
+  return {
+    getState: () => state,
+    setState: (next: (current: { count: number }) => { count: number }) => { state = next(state); },
+  };
+}
+
+it("notifies a package's value after a call on it, though no snapshot sees its state change", () => {
+  const packaged = closureStore();
+  let direct = 0;
+  const holder = root(packaged);
+  observeMutation([() => packaged], [() => { direct++; }], [0]).finish(packaged.setState((s) => ({ count: s.count + 1 })));
+  expect(packaged.getState().count).toBe(1);
+  // Its own reader, and a root elsewhere holding the same store (an imported store's module).
+  expect([direct, holder.notified]).toEqual([1, 1]);
+
+  // Without the mark, the snapshot decides, and it saw nothing.
+  observeMutation([() => packaged], [() => { direct++; }]).finish(packaged.setState((s) => ({ count: s.count + 1 })));
+  expect([direct, holder.notified]).toEqual([1, 1]);
+});
+
+it("does not notify a package's value from a call made while a computation runs", () => {
+  const packaged = closureStore();
+  let direct = 0;
+  const computation = createComputation(() => {});
+  computation.begin();
+  observeMutation([() => packaged], [() => { direct++; }], [0]).finish(packaged.getState());
+  computation.end();
+  expect(direct).toBe(0);
+});
+
 it('notifies only the roots whose data includes the edited object', () => {
   const shared = { done: false };
   const list = root([shared, { done: false }]);

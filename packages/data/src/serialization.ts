@@ -69,7 +69,9 @@ function serializeEntry(entry: FetchEntry): SerializedSourceRecord | undefined {
         kind: error?.kind ?? 'network',
         status: error?.status ?? null,
         statusText: error?.statusText ?? null,
-        message: 'Request failed',
+        // The message the page shows (a response's own `message`), which the server's HTML
+        // already holds, so hydration shows the same text (`wiki/decisions.md`, 2026-11-18).
+        message: error?.message ?? 'Request failed',
       },
     };
   } else if (snapshot.pending) {

@@ -5,7 +5,8 @@ import type { BindingNode } from '../../core/graph';
 import type { MutationPlan } from '../../core/plan/model';
 import type { Names } from '../../core/emit/names';
 import { copy } from '../../core/emit/copy';
-import { expression, statement, stringLiteral } from '../../core/emit/quote';
+import { expression, numberLiteral, statement, stringLiteral } from '../../core/emit/quote';
+import { holdsPackageValue } from './package-values';
 import type { Binding } from 'yuku-analyzer';
 
 interface MutationEmitOptions {
@@ -182,21 +183,28 @@ export function emitMutations(
       // variable instead. It is read before anything can suspend: the call takes it as `this`
       // ahead of its arguments, and the observation keeps its own copy.
       const suspends = findAll(plan.operation, 'AwaitExpression').length > 0 || findAll(plan.operation, 'YieldExpression').length > 0;
+      // A package's value keeps state a snapshot may not see (`package-values.ts`).
+      const packageValue = holdsPackageValue(plan.targets[0]!.binding.binding);
+      const observe = (observed: string) => packageValue
+        ? expression('$$runtime.observeMutation([() => $$observed], [$$notify], [0])', { runtime, observed, notify })
+        : expression('$$runtime.observeMutation([() => $$observed], [$$notify])', { runtime, observed, notify });
       if (suspends) {
         const observed = names.fresh('_held');
         declarations.push(statement('var $$held;', { held }));
-        replacements.set(plan.operation, expression('($$held = $$receiver, (($$observed) => $$runtime.observeMutation([() => $$observed], [$$notify]))($$held).finish($$call))', {
-          held, observed, runtime, notify, call, receiver,
+        replacements.set(plan.operation, expression('($$held = $$receiver, (($$observed) => $$observe)($$held).finish($$call))', {
+          held, observed, observe: observe(observed), call, receiver,
         }));
       } else {
-        replacements.set(plan.operation, expression('(($$held) => $$runtime.observeMutation([() => $$held], [$$notify]).finish($$call))($$receiver)', {
-          held, runtime, notify, call, receiver,
+        replacements.set(plan.operation, expression('(($$held) => $$observe.finish($$call))($$receiver)', {
+          held, observe: observe(held), call, receiver,
         }));
       }
       continue;
     }
     const notifications = [];
     const reads = [];
+    // Reads holding a package's value, whose state a snapshot may not see (`package-values.ts`).
+    const packageReads: Expression[] = [];
     for (const { binding, member } of plan.targets) {
       if (plan.kind !== 'call' && !is.MemberExpression(member)) continue;
       const notify = notifierOf(binding);
@@ -207,6 +215,7 @@ export function emitMutations(
           : [payload];
 
         for (const value of values) {
+          if (holdsPackageValue(binding.binding)) packageReads.push(numberLiteral(reads.length));
           notifications.push(expression('$$notify', { notify }));
           reads.push(expression('() => $$value', { value }));
         }
@@ -231,10 +240,15 @@ export function emitMutations(
     }
     if (plan.kind === 'call') {
       const operation = copy(plan.operation, replacements);
-      replacements.set(plan.operation, expression('$$runtime.observeMutation($$reads, $$notifications).finish($$operation)', {
-        runtime, operation,
-        reads: b.ArrayExpression({ elements: reads }), notifications: b.ArrayExpression({ elements: notifications }),
-      }));
+      const observe = packageReads.length === 0
+        ? expression('$$runtime.observeMutation($$reads, $$notifications)', {
+          runtime, reads: b.ArrayExpression({ elements: reads }), notifications: b.ArrayExpression({ elements: notifications }),
+        })
+        : expression('$$runtime.observeMutation($$reads, $$notifications, $$packageReads)', {
+          runtime, reads: b.ArrayExpression({ elements: reads }), notifications: b.ArrayExpression({ elements: notifications }),
+          packageReads: b.ArrayExpression({ elements: packageReads }),
+        });
+      replacements.set(plan.operation, expression('$$observe.finish($$operation)', { observe, operation }));
     }
   }
   return { replacements, declarations, notifiers: notifiers as ReadonlyMap<BindingNode, string> };

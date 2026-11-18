@@ -153,6 +153,8 @@ it('C: an edit buffer seeded on entering edit mode picks up refreshed data', asy
 it('D: a server-side failure hydrates as the error UI and Retry recovers on the client', async () => {
   const { host, reply } = await hydrate(app.Broken!, { '/api/broken': () => json({ message: 'down' }, 500) });
   await waitFor(() => expect(host.querySelector('.failed')).not.toBeNull());
+  // The browser shows the message the server's HTML showed (`wiki/decisions.md`, 2026-11-18).
+  expect(text(host, '.failed')).toBe('downRetry');
   click(host, '.retry');
   await reply('/api/broken', json({ name: 'Back' }));
   await waitFor(() => expect(text(host, 'h1')).toBe('Back'));

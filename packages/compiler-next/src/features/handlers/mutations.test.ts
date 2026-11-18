@@ -33,6 +33,28 @@ it('observes an imported value passed to an unknown call, but not to a framework
   expect(output['./main.ts']).not.toMatch(/observeMutation\(\[\(\) => App\]/);
 });
 
+// A package's value can keep state no snapshot sees (`package-values.ts`): its observations say so.
+it("marks the reads holding a package's value, here or through an import, and no others", () => {
+  const output = compileModules({
+    './store.ts': `import { createStore } from 'zustand/vanilla';
+      export const store = createStore(() => ({ count: 0 }));
+      export const plain = { count: 0, add() { this.count++; } };`,
+    './App.tsx': `import { createStore } from 'zustand/vanilla';
+      import { store, plain } from './store';
+      const local = createStore(() => ({ n: 0 }));
+      const alias = local;
+      export function App() {
+        return <main><p>{store.getState().count}:{local.getState().n}:{alias.getState().n}:{plain.count}</p>
+          <button onClick={() => { store.setState((s) => ({ count: s.count + 1 })); alias.setState(() => ({ n: 1 })); plain.add(); }}>+</button></main>;
+      }`,
+    './main.ts': `import { mount } from '@memoized-dom/runtime'; import { App } from './App'; mount('root', App);`,
+  });
+  const app = output['./App.tsx']!;
+  expect(app).toMatch(/observeMutation\(\[\(\) => store\], \[[\w$]+\], \[0\]\)\.finish\(store\.setState/);
+  expect(app).toMatch(/observeMutation\(\[\(\) => alias\], \[[\w$]+\], \[0\]\)\.finish\(alias\.setState/);
+  expect(app).toMatch(/observeMutation\(\[\(\) => plain\], \[[\w$]+\]\)\.finish\(plain\.add/);
+});
+
 async function compile(body: string, handlers: string) {
   const code = compileModules({ './App.tsx': `export const log = []; export let run;
     export function App() { ${body}

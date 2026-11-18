@@ -466,6 +466,31 @@ objects it reached through Object.values notifies readers`.
 `for (const c of Object.values(counters)) c.n++` needs none of this: the loop's `c` is an alias
 (above), so its edit reports through the alias index.
 
+### State a package keeps
+
+A value an uncompiled package made can keep its state where no snapshot sees it, in the package's
+closures or private fields. `const store = createStore(() => ({ count: 0 }))` from `zustand/vanilla`
+holds `count` in a closure; `store.setState(…)` changes it and leaves `store` as it was, so the
+observation saw nothing and `{store.getState().count}` never moved (`examples/stress-lab`, the four
+"npm zustand" cases). The old compiler showed it because it re-checked opaque readers every frame.
+
+Now the compiler marks the reads that hold a package's value (`package-values.ts`,
+`holdsPackageValue`): a name imported from an uncompiled package, or one whose initializer starts
+from one (`createStore(…)`, `new Emitter()`, `lib.store`, another such name), followed through
+imports. Their observations pass those reads' indices (`observeMutation(reads, notify, [0])`), and
+the runtime notifies them when the call ends whatever the snapshot says, with the value counted as
+changed so roots elsewhere holding it (an imported store's module) are found as for an edit. Readers
+compare what they read, so the page changes only where the value did. A value of the program's own
+is not marked: compiled code reports its own writes.
+
+Not while a computation runs (`tracking()`): a render or an effect calling `store.getState()` would
+wake every other reader of the store, and two such readers would keep waking each other. So a
+`setState` made synchronously in an effect's body is not seen; one from a handler, a timer, a
+promise callback or a module function is. Cost: after any call on a package's value from a handler,
+its readers evaluate again, and an effect reading it runs again. Cases: `mutations.test.ts`
+("marks the reads holding a package's value"), `runtime/tests/mutation.test.ts`, and stress-lab's
+probe end to end.
+
 ### Edits through a literal
 
 A literal that holds a value hands it on as the value itself would be (`core/resolve/writes.ts`,
