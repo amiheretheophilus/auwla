@@ -19,9 +19,9 @@ function readTargets(source: Record<string, unknown>): string[] | null {
     targets.push(value.trim());
   }
 
-  if (source.targets === undefined) {
-    while (targets.length > 1 && targets.at(-1) === '') targets.pop();
-  }
+  // Only TP1 is required. Empty rows after the last price are ignored, so an extra target
+  // box left blank does not hold the draft back. A blank row between prices still needs one.
+  while (targets.length > 1 && targets.at(-1) === '') targets.pop();
   return targets.length > 0 ? targets : [''];
 }
 

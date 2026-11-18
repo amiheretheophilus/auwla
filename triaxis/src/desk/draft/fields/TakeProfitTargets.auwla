@@ -101,7 +101,7 @@ export function TakeProfitTargets({ targets, addTarget, removeTarget, setTarget 
     <section class="desk-row" aria-labelledby="targets-heading">
       <div class="desk-row__head">
         <h2 id="targets-heading">"Take-profit targets"</h2>
-        <p>"In order from entry. The distance check uses TP2, or TP1 when there is one target."</p>
+        <p>"Only TP1 is required. Add more in order from entry; empty boxes at the end are ignored."</p>
       </div>
       <div>
         <ol class="targets">
