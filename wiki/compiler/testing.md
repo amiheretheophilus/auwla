@@ -352,6 +352,18 @@ checks before retention checks as well as in isolation when changing this fixtur
    - the dev error overlay after a broken server import, and recovery after a server-only throw
      (`dev-recovery-browser`); hydrated facade sources (`fullstack-browser`); lazy route navigation
      with `Group`, refs and effects (`lazy-route-browser`).
+   - a request that failed on the server does not hydrate as `Group`'s error UI: the client asks
+     again and shows the pending UI (`examples/stress-lab/ssr.test.ts`, "D"). The server sends the
+     error snapshot (`status: 'error'`), but its message is "Request failed" where the page shows the
+     response's own `message`; no mismatch warning is printed.
+
+   **The examples on compiler-next** (2026-11-18, step 5). `examples/stress-lab`'s own tests compile
+   with compiler-next: 164 of 175 pass. They found three bugs, fixed with cases: edits through
+   `Object.values(…)`'s result (`handlers.md`), `refresh()` of a `$read` whose promise a `const`
+   names (`sources.md`, "Refreshing a promise"), and the resource from `runtime.$fetch` (found by the
+   size audit, `sources.md`). One expectation follows the 2026-10-20 rule (an untouched local copy of
+   a prop follows a new version). Ten need `lodash-es`, `immer` and `zustand`, which are not
+   installed; one is the server error above.
 
    **The old compiler's tests deleted** (2026-11-17, step 4). First, its programs were recorded
    once more from the root suite (`MEMO_DOM_CORPUS`, 2,967 tests passing on it): 1,679 programs,

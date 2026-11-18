@@ -98,6 +98,23 @@ export function callEditsNoArgument(module: Module, call: Extract<Node, { type: 
   return owner === 'console' || PURE_NAMESPACES.has(owner) || PURE_MEMBERS.get(owner)?.has(callee.property.name) === true;
 }
 
+/** Host calls whose result holds the argument's own values (`Object.values(counters)[0]` is `counters.a`). */
+const ARGUMENT_VALUE_MEMBERS = new Map([
+  ['Object', new Set(['values', 'entries', 'fromEntries'])],
+  ['Array', new Set(['from', 'of'])],
+]);
+
+/**
+ * Whether `call` returns values its arguments hold, so that editing the result edits them: it
+ * edits no argument itself (`callEditsNoArgument`), but what it returns is not a fresh value.
+ */
+export function returnsArgumentValues(module: Module, call: Extract<Node, { type: 'CallExpression' }>): boolean {
+  const callee = call.callee;
+  if (!is.MemberExpression(callee) || callee.computed || !is.Identifier(callee.property)
+    || !is.Identifier(callee.object) || !isGlobal(module, callee.object)) return false;
+  return ARGUMENT_VALUE_MEMBERS.get(callee.object.name)?.has(callee.property.name) === true;
+}
+
 /** The method's callback, read before the callback itself is judged. */
 function methodCallIsPure(module: Module, call: Extract<Node, { type: 'CallExpression' }>, options: EffectOptions): boolean {
   const callee = call.callee;

@@ -383,6 +383,17 @@ as the old compiler does for `routedEnvironment: 'server'`.
 `DATA_DELIVERY=client` runs the cases and generators as a client-only build. Whether a
 call qualifies is tested in `features/sources/delivery.test.ts`.
 
+### Refreshing a promise
+
+`$read(promise)` gets a replay thunk, which `refresh()` runs to make the promise again. When a
+`const` in the same function names the promise and nothing writes it (`const promise = loadUser();
+const user = $read(promise)`), the thunk runs its initializer (`boundPromiseInitializer`,
+`flow-dom.ts`), as the reference does (`boundPromise`, `tests/reference/transform.ts`). It ran the
+argument, the first promise again, so a refresh requested nothing (found by `examples/stress-lab`,
+"d read: separately bound promise, then refresh", 2026-11-18). A promise from another function, such
+as a module's, still refreshes as itself. The case is `a $read of a promise made by a call in the
+component refreshes by calling it again`.
+
 ### A resource the author holds
 
 `createDataRuntime().$fetch(url)` hands back the resource itself, whose `.status`, `.pending` and

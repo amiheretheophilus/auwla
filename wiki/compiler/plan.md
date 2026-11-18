@@ -410,8 +410,11 @@ array child). Remove each check when its phase is built.
      and the comparisons in `packages/server`, `packages/jsx-plus` and compiler-next's harness.
      The programs they compiled stay as replay inputs (`tests/corpus/old-programs.json`,
      `testing.md`); the server's own behaviours they covered were ported.
-  5. [ ] Bench defaults to compiler-next (`--compiler=<snapshot>` stays for `d6e678b`); examples
-     follow, octopulse's conditional attributes rewritten as JavaScript.
+  5. [x] Bench defaults to compiler-next (`--compiler=<snapshot>` stays for `d6e678b`); examples
+     follow, octopulse's conditional attributes rewritten as JavaScript. Benchmarks of the old
+     compiler's own features went (`ssr/writer.ts`, `installed-packages`); hacker-news, octopulse
+     and server-pages use JavaScript conditionals; stress-lab's tests run on compiler-next
+     (`testing.md`, "The examples on compiler-next").
   6. [ ] `packages/compiler` is deleted, with the runtime, server and data code only its output
      reached.
   7. [ ] compiler-next is renamed `packages/compiler` (`@memoized-dom/compiler`); `docs/` follows.

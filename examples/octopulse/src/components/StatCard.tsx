@@ -64,15 +64,19 @@ export function StatCard({
           {value}
         </span>
         
-        {/* Sibling conditional or inline badge */}
-        <span if={!!change} className={`text-xs font-mono px-2 py-0.5 rounded-full border ${trendColor}`}>
-          {change}
-        </span>
+        {/* Inline badge, shown when there is a change */}
+        {change && (
+          <span className={`text-xs font-mono px-2 py-0.5 rounded-full border ${trendColor}`}>
+            {change}
+          </span>
+        )}
       </div>
 
-      <p if={!!subtitle} className="mt-2 text-xs text-ink-soft line-clamp-1">
-        {subtitle}
-      </p>
+      {subtitle && (
+        <p className="mt-2 text-xs text-ink-soft line-clamp-1">
+          {subtitle}
+        </p>
+      )}
     </div>
   );
 }

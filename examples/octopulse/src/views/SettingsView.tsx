@@ -76,18 +76,22 @@ export function SettingsView() {
       </div>
 
       {/* Dirty Changes Warning Banner */}
-      <div if={hasUnsavedChanges} className="p-4 rounded-2xl bg-amber-950/40 border border-amber-800/60 text-amber-300 flex items-center justify-between text-xs font-mono">
-        <span className="flex items-center gap-2">
-          <span>⚠️</span> You have unsaved changes. Navigation is protected by <code className="text-amber-400">blockNavigation</code>.
-        </span>
-        <span className="font-bold uppercase tracking-wider text-[10px] px-2 py-0.5 rounded bg-amber-900/60 text-amber-200">
-          Unsaved
-        </span>
-      </div>
+      {hasUnsavedChanges && (
+        <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-800/60 text-amber-300 flex items-center justify-between text-xs font-mono">
+          <span className="flex items-center gap-2">
+            <span>⚠️</span> You have unsaved changes. Navigation is protected by <code className="text-amber-400">blockNavigation</code>.
+          </span>
+          <span className="font-bold uppercase tracking-wider text-[10px] px-2 py-0.5 rounded bg-amber-900/60 text-amber-200">
+            Unsaved
+          </span>
+        </div>
+      )}
 
-      <div if={!!saveNotification} className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 text-xs font-mono flex items-center gap-2">
-        <span>✅</span> {saveNotification}
-      </div>
+      {saveNotification && (
+        <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 text-xs font-mono flex items-center gap-2">
+          <span>✅</span> {saveNotification}
+        </div>
+      )}
 
       {/* Settings Form */}
       <form onSubmit={handleSave} className="p-6 sm:p-8 rounded-3xl bg-surface border border-line shadow-2xl space-y-6">
@@ -151,7 +155,7 @@ export function SettingsView() {
             >
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-bold text-ink">🌙 Warm Obsidian (Dark)</span>
-                <span if={theme === 'dark'} className="text-xs text-emerald-400 font-bold">Active</span>
+                {theme === 'dark' && <span className="text-xs text-emerald-400 font-bold">Active</span>}
               </div>
               <p className="text-xs text-ink-faint">
                 Charcoal forest, emerald, and warm amber accents. Zero blue/violet glare.
@@ -169,7 +173,7 @@ export function SettingsView() {
             >
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-bold text-ink">☀️ Crisp Sage (Light)</span>
-                <span if={theme === 'light'} className="text-xs text-emerald-400 font-bold">Active</span>
+                {theme === 'light' && <span className="text-xs text-emerald-400 font-bold">Active</span>}
               </div>
               <p className="text-xs text-ink-faint">
                 Clean organic paper tone with deep moss contrast.

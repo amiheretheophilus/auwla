@@ -23,6 +23,7 @@ Finds every place that changes state and makes the UI update after it.
 | `packages/runtime/tests/mutation.test.ts` | Descriptor snapshots, cyclic/native data, partial-call recovery and key order |
 | `packages/runtime/tests/mutation-roots.test.ts` | Index membership cleanup on disposal/replacement, retained live aliases, opaque edits, interrupted rebuilds and disposal during reflection |
 | `optimize/methods.ts`, `optimize/method-facts.ts` | Known reads stay plain calls and known edits report their root (`optimize.md`, "Method calls") |
+| `optimize/aliased-results.ts` | A host call whose result holds its argument's values (`Object.values(counters)`) is observed around the use that edits that result (below, "Edits through a call's result") |
 | `optimize/methods.dom.test.ts` | Callback classification and native updates, overrides and order, with optimizations on and off |
 | `tests/cases/handlers.test.ts` | Reference comparisons for handlers, async writes, helper callbacks, accessors, method/prototype replacement and index/property-key conversions whose edits must reach the UI |
 | `packages/runtime/src/recovery-hooks.ts` | Lets write batches and build scopes restore observations and computations after a throw without importing those modules, so a program that has neither does not retain them |
@@ -447,6 +448,26 @@ source, and ran again when that data arrived: the team example's People page log
 `people:shown, people:left, people:shown` on one visit (found by the user, 2026-11-13). The index
 now reads roots untracked (`readRoot`). The JSX+ routes test checks every visit's exact lifecycle;
 it fails without the change.
+
+### Edits through a call's result
+
+`Object.values(counters)` edits nothing it is given, so it stays a plain read. But its result holds
+`counters`' own objects, and `Object.values(counters).forEach((c) => c.n++)` edits them through it:
+nothing there names `counters`, and the page reading `counters.a.n` never changed (found by
+`examples/stress-lab`, "r3 Object.values(...).forEach increments", 2026-11-18). Now, for the host calls
+whose result holds their arguments' values (`Object.values`, `Object.entries`, `Object.fromEntries`,
+`Array.from`, `Array.of`; `returnsArgumentValues`, `optimize/effects.ts`), a use that edits the result
+right where it is used is what the observation wraps (`editedUseOfResult`, `aliased-results.ts`;
+`planMutations`, `plan.ts`): a method called on it whose callback is not known to edit no object, or a
+member of it written or called (`Object.values(x)[0].n = 1`). Any other use still only reads, so row
+reuse over `Array.from(items, row)` is unchanged. The case is `shared: a module function editing
+objects it reached through Object.values notifies readers`.
+
+Known gaps, which the reference misses too:
+
+- `for (const c of Object.values(counters)) c.n++`: the edits are in a loop body, not one expression.
+- `[counters.a, counters.b].forEach((c) => c.n++)`: the array literal names `counters.a` as a plain
+  read, and nothing marks the later edit through it.
 
 ## Inputs and outputs
 

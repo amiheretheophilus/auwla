@@ -37,6 +37,20 @@ behaves('shared: reexported bindings keep live reads and module derivation', {
   check: show(['1:2', '2:4', '2:99', '3:99']),
 });
 
+// Found by examples/stress-lab ("r3 Object.values(...).forEach increments"): the objects the writer
+// edits are reached through `Object.values`, a call the compiler does not follow.
+behaves('shared: a module function editing objects it reached through Object.values notifies readers', {
+  modules: {
+    './store.ts': `export const counters = { a: { n: 0 }, b: { n: 0 } };
+      export function bumpAll() { Object.values(counters).forEach((c) => c.n++); }`,
+  },
+  source: `import { counters, bumpAll } from './store';
+    export function App() { return <main><p>{counters.a.n + counters.b.n}</p>
+      <button onClick={() => bumpAll()}>bump</button></main>; }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check: show(['0', '2', '4']),
+});
+
 behaves('shared: private fields and super stores notify receiver readers', {
   source: `class Base {
     #count = 1;

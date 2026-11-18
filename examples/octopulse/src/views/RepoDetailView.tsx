@@ -44,13 +44,14 @@ export function RepoDetailView() {
       </div>
 
       {/* Repo Details Header */}
-      <div if={repoResource.pending && !repoResource.data} className="p-6 rounded-3xl bg-surface border border-line animate-pulse h-48">
+      {repoResource.pending && !repoResource.data ? (
+      <div className="p-6 rounded-3xl bg-surface border border-line animate-pulse h-48">
         <div className="h-6 bg-elevated rounded w-1/3 mb-4"></div>
         <div className="h-4 bg-elevated rounded w-2/3 mb-2"></div>
         <div className="h-4 bg-elevated rounded w-1/2"></div>
       </div>
-
-      <div else-if={!!repoResource.error && !repoResource.data} className="p-6 rounded-3xl bg-rose-950/30 border border-rose-800/60 text-rose-300">
+      ) : repoResource.error && !repoResource.data ? (
+      <div className="p-6 rounded-3xl bg-rose-950/30 border border-rose-800/60 text-rose-300">
         <h2 className="font-bold text-lg mb-1">Failed to load repository details</h2>
         <p className="text-xs text-rose-400 mb-3">{repoResource.error?.message}</p>
         <button
@@ -60,8 +61,8 @@ export function RepoDetailView() {
           Retry
         </button>
       </div>
-
-      <div else className="p-6 sm:p-8 rounded-3xl bg-surface border border-line shadow-2xl space-y-6">
+      ) : (
+      <div className="p-6 sm:p-8 rounded-3xl bg-surface border border-line shadow-2xl space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <img
@@ -126,6 +127,7 @@ export function RepoDetailView() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Live Open Issues Section */}
       <div className="p-6 rounded-3xl bg-surface border border-line shadow-xl space-y-4">
@@ -143,17 +145,18 @@ export function RepoDetailView() {
         </div>
 
         {/* Loading / Error / Success branches */}
-        <div if={issuesResource.pending && !issuesResource.data} className="space-y-3">
+        {issuesResource.pending && !issuesResource.data ? (
+        <div className="space-y-3">
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-16 rounded-xl bg-base border border-line animate-pulse"></div>
           ))}
         </div>
-
-        <div else-if={!!issuesResource.error && !issuesResource.data} className="p-4 rounded-xl bg-rose-950/30 border border-rose-800/60 text-rose-300 text-xs">
+        ) : issuesResource.error && !issuesResource.data ? (
+        <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-800/60 text-rose-300 text-xs">
           Unable to fetch open issues for this repository: {issuesResource.error?.message}
         </div>
-
-        <div else className="space-y-3">
+        ) : (
+        <div className="space-y-3">
           {issuesResource.data?.map((issue) => (
             <div
               key={issue.id}
@@ -194,6 +197,7 @@ export function RepoDetailView() {
             </div>
           ))}
         </div>
+        )}
       </div>
 
     </main>

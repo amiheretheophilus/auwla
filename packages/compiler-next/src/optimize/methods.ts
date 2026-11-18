@@ -18,9 +18,10 @@ import { intrinsicTag, unwrap } from '../core/plan/jsx';
 import type { ComponentPlan, MemoGroupPlan, ModulePlan, MutationPlan, SharedOwnerPlan } from '../core/plan/model';
 import type { BindingNode, SemanticGraph } from '../core/graph';
 import type { Optimization } from '.';
+import { callbacksKnown, editsNoObject } from './aliased-results';
 import { callEditsNoArgument, callOnlyStoresNames, effectFree, isReadingIntrinsic, runsDuringCall } from './effects';
 import { mappingCall } from './mapping-calls';
-import { methodFact, redefinedNames, type MethodFact } from './method-facts';
+import { methodFact, redefinedNames } from './method-facts';
 import { rowReuse } from './row-reuse';
 
 type Call = Extract<Node, { type: 'CallExpression' }>;
@@ -105,19 +106,6 @@ function foreignObject(module: Module, object: Node): boolean {
   return binding === null || module.imports.some((imported) => imported.local === binding);
 }
 
-/** A callback that runs during the call and can edit no object, so nothing needs observing. */
-function editsNoObject(module: Module, callback: Node): boolean {
-  return effectFree(module, callback, { ownFunctions: true, nameWrites: true });
-}
-
-function callbacksKnown(module: Module, call: Call, fact: MethodFact): boolean {
-  return call.arguments.every((argument, index) => {
-    if (is.SpreadElement(argument)) return fact.callback < 0;
-    if (is.Function(argument)) return editsNoObject(module, argument);
-    return index !== fact.callback;
-  });
-}
-
 function lowerCall(
   plan: MutationPlan,
   general: ModulePlan,
@@ -126,6 +114,8 @@ function lowerCall(
   if (plan.kind !== 'call' || plan.method !== undefined || !is.CallExpression(plan.operation)) return plan;
 
   const call = plan.operation;
+  // A call whose result is edited where it is used is already planned as that use
+  // (`aliased-results.ts`), so `Object.values(counters)` here is only read.
   if (callEditsNoArgument(general.module.module, call)
     && call.arguments.every((argument) => !is.Function(argument) || editsNoObject(general.module.module, argument) || !runsDuringCall(call))) {
     // `Array.from(items, row)` reads its items like `map` does.

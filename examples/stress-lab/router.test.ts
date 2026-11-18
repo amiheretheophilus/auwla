@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, beforeAll, beforeEach, expect, it } from 'bun:test';
-import { compileModules } from '@memoized-dom/compiler';
+import { compileModules } from '@memoized-dom/compiler-next';
 import { createDataRuntime, setActiveDataRuntime, type DataRuntime } from '@memoized-dom/data';
 import { createRouteRuntime, setActiveRouteRuntime, type RouteRuntime } from '@memoized-dom/router';
 import { _internals, resetScheduler, setScheduler, unregister } from '@memoized-dom/runtime/testing';

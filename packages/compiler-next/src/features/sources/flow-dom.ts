@@ -1,4 +1,5 @@
 /** Compose readiness, handle reads and lexical presentation on fresh syntax. */
+import type { Module } from 'yuku-analyzer';
 import { b, findAll, is } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
 import type { ModulePlan, SourceInputPlan } from '../../core/plan/model';
@@ -140,8 +141,11 @@ export function emitSourceFlow(
     const own = [created, ...findAll(created, 'CallExpression')].filter((node) => originOf(node) === call).at(-1) ?? created;
 
     if (read && is.CallExpression(own) && own.arguments.length === 1) {
+      // `refresh()` makes the promise again: from its initializer when a `const` in the same
+      // function names it (`const promise = loadUser(); $read(promise)`), else from the argument.
+      const bound = boundPromiseInitializer(module, call);
       own.arguments.push(expression('() => $$promise', {
-        promise: copy(call.arguments[0]!, replacements),
+        promise: copy(bound ?? call.arguments[0]!, replacements),
       }));
     }
 
@@ -554,6 +558,29 @@ function readinessBindings(flow: NonNullable<ModulePlan['sourceFlow']>): Set<Bin
     ...flow.bindingBuilders.keys(),
     ...[...flow.builders.values()].flatMap((builder) => builder.definite),
   ]);
+}
+
+/**
+ * `const promise = loadUser(); $read(promise)`, in one function and never written: the
+ * initializer that makes the promise, which `refresh()` runs again (`wiki/compiler/sources.md`,
+ * "Refreshing a promise"). Null for any other argument, such as a promise from another function,
+ * which refreshes as itself.
+ */
+function boundPromiseInitializer(module: Module, call: Extract<Node, { type: 'CallExpression' }>): Expression | null {
+  const argument = call.arguments[0];
+  if (argument === undefined || !is.Identifier(argument)) return null;
+
+  const binding = module.referenceOf(argument)?.binding ?? null;
+  const name = binding?.declarations[0];
+  if (binding === null || name === undefined || binding.references.some((reference) => reference.isWrite)) return null;
+
+  const declarator = module.parentOf(name);
+  if (!is.VariableDeclarator(declarator) || declarator.id !== name || declarator.init === null) return null;
+  const declaration = module.parentOf(declarator);
+  if (!is.VariableDeclaration(declaration) || declaration.kind !== 'const') return null;
+
+  const functionOf = (node: Node) => [...module.ancestors(node)].find((ancestor) => is.Function(ancestor)) ?? null;
+  return functionOf(declarator) === functionOf(call) ? declarator.init as Expression : null;
 }
 
 function withChoices(cache: string | null, value: Expression): Expression {

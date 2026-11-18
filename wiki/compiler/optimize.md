@@ -64,6 +64,7 @@ interface Optimization {
 | `method-facts.ts` (built) | What each known method name does: copy, read or edit ("Method calls" below) |
 | `methods.ts` (built) | Known reads stay plain calls and known edits report their root, decided at compile time. Unknown names keep the before/after check ("Method calls" below) |
 | `effects.ts` (built) | Whether a callback or argument can do more than read and create values |
+| `aliased-results.ts` (built) | Which callbacks edit no object, and the use that edits a host call's result when that result holds the call's arguments (`handlers.md`, "Edits through a call's result") |
 | `text-fusion.ts` (built) | Adjacent static text and read-only `{expression}` children share one text node, and expand into one slot per part if a part turns out to be an object at runtime |
 | `closed-lists.ts` (built) | Proves nothing but compiled code can reach a list's items, then skips rows that kept their item, stores without an alias lookup, and writes row text directly ("Closed lists" below) |
 | `handler-reads.ts` (built) | Reads in an event handler are the plain variable: no computation is running there, so `trackRead` has nothing to tell. Nested functions that may be stored stay tracked |

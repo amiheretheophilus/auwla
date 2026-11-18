@@ -159,8 +159,9 @@ export function RepoExplorerView() {
         </div>
       </div>
 
-      {/* Results Container with Sibling Directives */}
-      <div if={searchResults.pending && !searchResults.data} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Results: loading, failed, or found */}
+      {searchResults.pending && !searchResults.data ? (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {[1, 2, 3, 4, 5, 6].map((idx) => (
           <div key={idx} className="h-40 rounded-2xl bg-surface border border-line animate-pulse p-5 flex flex-col justify-between">
             <div className="h-4 bg-elevated rounded w-3/4"></div>
@@ -169,8 +170,8 @@ export function RepoExplorerView() {
           </div>
         ))}
       </div>
-
-      <div else-if={!!searchResults.error && !searchResults.data} className="p-8 rounded-2xl bg-rose-950/30 border border-rose-800/60 text-rose-300 text-center">
+      ) : searchResults.error && !searchResults.data ? (
+      <div className="p-8 rounded-2xl bg-rose-950/30 border border-rose-800/60 text-rose-300 text-center">
         <span className="text-3xl block mb-2">⚠️</span>
         <h3 className="font-bold text-base mb-1">GitHub API Query Failed</h3>
         <p className="text-xs text-rose-400 mb-4 max-w-md mx-auto">{searchResults.error?.message}</p>
@@ -181,8 +182,8 @@ export function RepoExplorerView() {
           Try Again
         </button>
       </div>
-
-      <div else className="space-y-4">
+      ) : (
+      <div className="space-y-4">
         <div className="flex items-center justify-between text-xs text-ink-soft font-mono px-1">
           <span>Found {searchResults.data?.total_count.toLocaleString() ?? 0} matches</span>
           <span>Showing top {searchResults.data?.items.length ?? 0} results</span>
@@ -225,9 +226,11 @@ export function RepoExplorerView() {
                 <span className="flex items-center gap-1 text-amber-400 font-semibold">
                   ★ {(repo.stargazers_count / 1000).toFixed(1)}k
                 </span>
-                <span if={!!repo.language} className="px-2 py-0.5 rounded bg-base text-ink-soft border border-line">
-                  {repo.language}
-                </span>
+                {repo.language && (
+                  <span className="px-2 py-0.5 rounded bg-base text-ink-soft border border-line">
+                    {repo.language}
+                  </span>
+                )}
                 <span className="text-ink-faint">
                   🍴 {repo.forks_count}
                 </span>
@@ -236,6 +239,7 @@ export function RepoExplorerView() {
           ))}
         </div>
       </div>
+      )}
 
     </main>
   );

@@ -197,13 +197,14 @@ export function LiveTaskBoardView() {
       </div>
 
       {/* Task List container */}
-      <div if={tasksResource.pending && !tasksResource.data} className="space-y-3">
+      {tasksResource.pending && !tasksResource.data ? (
+      <div className="space-y-3">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="h-16 rounded-2xl bg-surface border border-line animate-pulse"></div>
         ))}
       </div>
-
-      <div else-if={!!tasksResource.error && !tasksResource.data} className="p-6 rounded-2xl bg-rose-950/30 border border-rose-800/60 text-rose-300 text-center">
+      ) : tasksResource.error && !tasksResource.data ? (
+      <div className="p-6 rounded-2xl bg-rose-950/30 border border-rose-800/60 text-rose-300 text-center">
         <p className="text-sm font-bold">Failed to load tasks from server</p>
         <button
           onClick={() => tasksResource.refresh()}
@@ -212,8 +213,8 @@ export function LiveTaskBoardView() {
           Retry
         </button>
       </div>
-
-      <div else className="space-y-3">
+      ) : (
+      <div className="space-y-3">
         {filteredTasks.map((task) => (
           <div
             key={task.id}
@@ -260,6 +261,7 @@ export function LiveTaskBoardView() {
           </div>
         ))}
       </div>
+      )}
 
     </main>
   );

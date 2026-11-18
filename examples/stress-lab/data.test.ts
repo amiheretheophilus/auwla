@@ -16,7 +16,7 @@ import { afterEach, expect, it } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { compileModules } from '@memoized-dom/compiler';
+import { compileModules } from '@memoized-dom/compiler-next';
 import { createDataRuntime, setActiveDataRuntime, type DataRuntime } from '@memoized-dom/data';
 import { _internals, resetAccessTable, resetScheduler, setScheduler, unregister } from '@memoized-dom/runtime/testing';
 
@@ -325,12 +325,14 @@ const cases: DataCase[] = [
       },
       // A written `let` copy is local state set once (docs/05-data.md, "Editing a copy").
       {
-        name: 'd resolved: local copy keeps its value when a new version arrives',
+        // A local derives until it is first written, then holds what was written
+        // (`wiki/decisions.md`, 2026-10-20), so an untouched copy follows the new version.
+        name: 'd resolved: an untouched local copy follows a new version',
         modules: { ...api, './Note.tsx': `export function Note({note}:{note:{id:number;text:string}}){
           let text=note.text;
           return <i>{note.text}/{text}<button id={'type'+note.id} onClick={()=>{text='typed';}}></button></i>;}` },
         app: list(''),
-        steps: [[v1, 'a/a'], ['click:refresh', 'a/a'], [v2, 'b/a']],
+        steps: [[v1, 'a/a'], ['click:refresh', 'a/a'], [v2, 'b/b']],
       },
       {
         name: 'd resolved: typed edits survive a new version arriving',

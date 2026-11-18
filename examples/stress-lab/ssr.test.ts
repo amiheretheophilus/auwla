@@ -4,7 +4,7 @@ import { afterEach, expect, it } from 'bun:test';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { compileModules } from '@memoized-dom/compiler';
+import { compileModules } from '@memoized-dom/compiler-next';
 import { render } from '@memoized-dom/server';
 import { mount, type MountedApplication } from '@memoized-dom/runtime';
 import '@memoized-dom/runtime/hydrate';

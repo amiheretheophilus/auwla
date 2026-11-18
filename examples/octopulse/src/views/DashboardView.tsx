@@ -206,8 +206,9 @@ export function DashboardView() {
           </div>
         </div>
 
-        {/* Sibling Conditions: Loading / Error / Success */}
-        <div if={featuredRepos.pending && !featuredRepos.data} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Loading / Error / Success */}
+        {featuredRepos.pending && !featuredRepos.data ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="h-36 rounded-2xl bg-base border border-line animate-pulse p-4 flex flex-col justify-between">
             <div className="h-4 bg-elevated rounded w-2/3"></div>
             <div className="h-3 bg-elevated rounded w-full"></div>
@@ -224,8 +225,8 @@ export function DashboardView() {
             <div className="h-3 bg-elevated rounded w-1/2"></div>
           </div>
         </div>
-
-        <div else-if={!!featuredRepos.error && !featuredRepos.data} className="p-6 rounded-2xl bg-rose-950/30 border border-rose-800/50 text-rose-300 text-sm">
+        ) : featuredRepos.error && !featuredRepos.data ? (
+        <div className="p-6 rounded-2xl bg-rose-950/30 border border-rose-800/50 text-rose-300 text-sm">
           <div className="font-bold mb-1">Failed to connect to GitHub REST API:</div>
           <p className="text-xs text-rose-400 mb-3">{featuredRepos.error?.message}</p>
           <button
@@ -235,8 +236,8 @@ export function DashboardView() {
             Retry Connection
           </button>
         </div>
-
-        <div else className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {featuredRepos.data?.items.map((repo) => (
             <div
               key={repo.id}
@@ -273,9 +274,11 @@ export function DashboardView() {
                 <span className="flex items-center gap-1 text-amber-400 font-semibold">
                   ★ {(repo.stargazers_count / 1000).toFixed(1)}k
                 </span>
-                <span if={!!repo.language} className="px-2 py-0.5 rounded bg-surface text-ink-soft border border-line">
-                  {repo.language}
-                </span>
+                {repo.language && (
+                  <span className="px-2 py-0.5 rounded bg-surface text-ink-soft border border-line">
+                    {repo.language}
+                  </span>
+                )}
                 <span className="text-ink-faint">
                   🍴 {repo.forks_count}
                 </span>
@@ -283,6 +286,7 @@ export function DashboardView() {
             </div>
           ))}
         </div>
+        )}
       </div>
 
       {/* Active Deployments Managed via Plain Class State */}

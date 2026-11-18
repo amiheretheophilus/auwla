@@ -9,6 +9,7 @@ import { unwrap } from '../../core/plan/jsx';
 import { containsJsx } from '../../core/plan/template';
 import { variableDeclaration } from '../../core/graph/inputs';
 import { frameworkPackage, isValueImport } from '../../core/resolve/exports';
+import { editedUseOfResult } from '../../optimize/aliased-results';
 import { callOnlyReads } from '../../optimize/effects';
 import { methodFact } from '../../optimize/method-facts';
 
@@ -50,12 +51,16 @@ export function planMutations(bindings: readonly BindingNode[]): readonly Mutati
         if (is.MemberExpression(parent)) member = parent;
       }
       const kind = site.kind === 'call' || site.kind === 'argument' ? 'call' : site.kind === 'delete' ? 'delete' : 'store';
-      const entry = operations.get(site.node) ?? { kind, targets: [] };
+      // `Object.values(counters).forEach((c) => c.n++)`: the edit is in the use of the result,
+      // so the observation wraps that use (`optimize/aliased-results.ts`).
+      const edited = site.kind === 'argument' && is.CallExpression(site.node) ? editedUseOfResult(module, site.node) : null;
+      const node = edited ?? site.node;
+      const entry = operations.get(node) ?? { kind, targets: [] };
       const reached = kind === 'call' ? [binding, ...stateBehindAccessors(binding, byBinding)] : [binding];
       for (const target of reached) {
         if (!entry.targets.some((existing) => existing.binding === target)) entry.targets.push({ binding: target, member });
       }
-      operations.set(site.node, entry);
+      operations.set(node, entry);
     }
   }
   return [...operations].map(([operation, entry]) => ({ operation, ...entry }));

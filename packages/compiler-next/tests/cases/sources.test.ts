@@ -997,6 +997,31 @@ behaves('a $read of a module promise through an alias refreshes', {
   },
 });
 
+// A promise named by a `const` in the same function is made again from its initializer, as
+// `refresh()` asks (the reference's `boundPromise`). Found by examples/stress-lab ("d read:
+// separately bound promise, then refresh"): the refresh read the first promise again.
+behaves('a $read of a promise made by a call in the component refreshes by calling it again', {
+  modules: { './api.ts': `export function loadUser() { return defer('user'); }` },
+  source: `
+    import { $read, $track } from '@memoized-dom/data';
+    import { loadUser } from './api';
+    export function App() {
+      const promise = loadUser();
+      const user = $read(promise);
+      const request = $track(user);
+      return <main><output>{request.pending ? 'loading' : user.n}</output>
+        <button onClick={() => request.refresh()}>refresh</button></main>;
+    }`,
+  steps: [
+    { resolve: 'user', value: { n: 'one' } },
+    { click: 'button' },
+    { resolve: 'user', value: { n: 'two' } },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('output')?.textContent).toBe(['loading', 'one', 'one', 'two'][observation]);
+  },
+});
+
 behaves('a GET server-function client facade behaves as a source', {
   modules: {
     './users.ts': `
