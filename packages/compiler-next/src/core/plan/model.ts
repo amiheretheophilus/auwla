@@ -9,7 +9,7 @@ import type { GlobalAccess } from '../resolve/globals';
 import type { BindingNode } from '../graph';
 import type { Binding, Export, Module } from 'yuku-analyzer';
 
-/** One node of a template, in the creation order `materializeMarkup` returns (post-order). */
+/** One node of a template, in post-order creation order. */
 export type TemplateNode =
   | {
     readonly kind: 'element';
@@ -40,8 +40,8 @@ export interface Template {
    */
   readonly namespace: 'html' | 'svg';
   /**
-   * The HTML for `materializeMarkup`, or null when the HTML parser would build a
-   * different tree (`jsx.ts`, `parsesAsWritten`): then emit creates the nodes.
+   * The template's HTML, or null when the HTML parser would build a different
+   * tree (`jsx.ts`, `parsesAsWritten`): then emit creates the nodes.
    */
   readonly markup: string | null;
 }

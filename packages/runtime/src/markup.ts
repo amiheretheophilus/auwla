@@ -1,32 +1,13 @@
 /**
- * markup.ts - "DOM as data" materialization for compiler-generated static
- * subtrees.
- *
- * The compiler serializes each eligible static subtree into a module-level
- * markup string and emits one materializeMarkup(markup) call per segment.
- * The call returns every markup'd node in compiler creation order
- * (post-order: descendants before parents — the markup root is last), which
- * is the same sequence imperative creation emitted and the same sequence
- * hydration plans expect.
- *
- * Modes:
- *   client-create — parse once into a cached <template>, cloneNode(true)
- *                   per instance; far cheaper than per-node createElement.
- *   hydrate       — HydrationController.claimMarkup claims each node
- *                   through the active creation plan (marker-aware,
- *                   fully validated, no real DOM construction).
- *   server modes  — the injected DocumentLike supplies materializeMarkup
- *                   (StringDocument interprets markup through its own
- *                   factories, keeping SSR output byte-identical). The
- *                   markup parser stays out of browser bundles.
+ * markup.ts - compiler-next's templates: a static subtree described as data
+ * (`TemplateNode`), built once per document and namespace and cloned per
+ * instance. The old compiler's markup strings (`materializeMarkup`, with the
+ * server's markup parser) went with it on 2026-11-18.
  */
 
 import { getActiveEnvironment } from './kernel';
 import type { DocumentLike } from './environment';
 import { adoptTemplate, noteTemplate, unnumbered } from './adoption';
-import { HydrationMismatchError } from './hydration-error';
-
-const templates = new WeakMap<DocumentLike, Map<string, Element>>();
 
 /**
  * compiler-next's description of a template's nodes:
@@ -89,18 +70,12 @@ function buildTemplate(document: DocumentLike, roots: readonly TemplateNode[], n
  * and clones its own nodes the same way.
  *
  * A clone is a creation (`adoption.ts`): a server numbers it, and a browser
- * adopting server HTML takes the server's nodes for it when they fit. The old
- * compiler's hydration plans cannot claim it: HTML with the old markers and no
- * numbers is a mismatch, which the hydration's own recovery answers with a
- * client render in place of that HTML.
+ * adopting server HTML takes the server's nodes for it when they fit.
  */
 export function cloneTemplate(cache: TemplateCache, namespace?: 'html' | 'svg'): Node {
   const environment = getActiveEnvironment();
   // Template nodes are not creations (`adoption.ts`), so they come from the unnumbered document.
   const document = unnumbered(environment.document);
-  if (environment.hydration !== undefined) {
-    throw new HydrationMismatchError('template', 'numbered server HTML (compiler-next)', 'hydration markers without numbers');
-  }
   const creations = environment.creations;
   const id = creations === undefined ? '' : creations.next();
   if (creations !== undefined) {
@@ -123,55 +98,4 @@ export function cloneTemplate(cache: TemplateCache, namespace?: 'html' | 'svg'):
   }
   if (creations?.note !== undefined) noteTemplate(creations, id, clone, cache.roots.length);
   return clone;
-}
-
-/**
- * Materialize one compiler-generated markup string. Returns nodes in
- * compiler creation order (post-order DFS — the markup root is last).
- */
-export function materializeMarkup(markup: string): Node[] {
-  const environment = getActiveEnvironment();
-  const hydration = environment.hydration;
-  if (hydration !== undefined) {
-    return hydration.claimMarkup(markup);
-  }
-  const document = environment.document;
-  if (document.materializeMarkup !== undefined) {
-    return document.materializeMarkup(markup);
-  }
-  let documentTemplates = templates.get(document);
-  if (documentTemplates === undefined) {
-    documentTemplates = new Map();
-    templates.set(document, documentTemplates);
-  }
-  let template = documentTemplates.get(markup);
-  if (template === undefined) {
-    template = document.createElement('template');
-    (template as { innerHTML: string }).innerHTML = markup;
-    documentTemplates.set(markup, template);
-  }
-  const clone = (
-    template as unknown as { content: DocumentFragment }
-  ).content.cloneNode(true);
-  const nodes: Node[] = [];
-  collectCreationOrder((clone as DocumentFragment).firstChild, null, nodes);
-  return nodes;
-}
-
-/**
- * Post-order walk matching the compiler's creation order and the hydration
- * plan's collectCreationOrder for markup subtrees (markup contains no
- * structural markers — structural ranges stay imperative).
- */
-function collectCreationOrder(
-  start: Node | null,
-  end: Node | null,
-  output: Node[],
-): void {
-  let node = start;
-  while (node !== null && node !== end) {
-    collectCreationOrder(node.firstChild, null, output);
-    output.push(node);
-    node = node.nextSibling;
-  }
 }

@@ -12,8 +12,6 @@ setStorageFactory(<T>() => new AsyncLocalStorage<T>(), Symbol.for('memoized-dom:
 installApplicationRuntimeStorage();
 
 export * from './index';
-export { parseMarkup } from './markup-parse';
-export type { MarkupChild, MarkupElement } from './markup-parse';
 export { initialBootstrapDescriptor, readInitialBootstrap } from './initial-delivery';
 export type { InitialBootstrap } from './initial-delivery';
 export { numberedDocument, serverCreations } from './adoption';

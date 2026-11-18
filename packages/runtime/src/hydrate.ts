@@ -1,4 +1,4 @@
-/** General hydration entry: installs all capabilities over the shared engine. */
-import { installProgramHydration, hydrateList, hydrateMarkup } from './hydrate-program';
+/** Hydration entry: installs adoption of the server's HTML (`hydrate-program.ts`). */
+import { installProgramHydration } from './hydrate-program';
 
-installProgramHydration({ list: hydrateList, markup: hydrateMarkup });
+installProgramHydration();

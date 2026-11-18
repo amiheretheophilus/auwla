@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from 'bun:test';
 import { initializePayload } from '../packages/runtime/src/payload';
-import { mountInitial, registerRootFactory } from '../packages/runtime/src/mount-core';
+import { createApplication } from '../packages/runtime/src/mount-core';
 import { createApplicationRuntime, runWithApplicationRuntime, getExtensionStore, registerEntity, has } from '../packages/runtime/src/kernel';
 import { cleanup } from '../packages/runtime/src/cleanup';
 
@@ -15,11 +15,12 @@ it('restores before initial bindings and completes after the shared mount owns t
     const bridge=getExtensionStore<Record<string,unknown>>('mmd:data-runtime-active',()=>({}));
     bridge.restoreState=(value:unknown)=>order.push(`restore:${value}`);
     bridge.completeHydration=()=>order.push('complete');bridge.cancelHydration=vi.fn();
-    const App=()=>undefined;
-    registerRootFactory(App,{id:'App',create(){
+    // As the hydration entry hands the payload over (`hydrate-program.ts`).
+    const host=document.getElementById('root')!;
+    const definition={id:'App',create(){
       order.push('create');registerEntity({id:'App',parent:null,render(){}});return main;
-    }});
-    const app=mountInitial('root',App,initializePayload);
+    }};
+    const app=initializePayload(host,definition,()=>createApplication(host,definition));
     try {
       expect(order).toEqual(['restore:server','create','complete']);
       expect(app.nodes).toEqual([main]);expect(document.querySelector('main')).toBe(main);

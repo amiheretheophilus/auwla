@@ -16,7 +16,7 @@
  *     survives, so re-mounting a branch reflects current state.
  */
 
-import { getActiveEnvironment, getEntity, unregisterSubtree, type EntityId } from './kernel';
+import { getActiveEnvironment, type EntityId } from './kernel';
 import type { DirtyReasons } from './dirty-reasons';
 import { buildInScope, reserveCreationScope } from './adoption';
 
@@ -33,7 +33,7 @@ export interface CondEntry {
   dispose?: () => void;
 }
 
-export type CondBranchFactory = (adoptingInitial?: boolean, hydrating?: boolean) => CondEntry;
+export type CondBranchFactory = (adoptingInitial?: boolean) => CondEntry;
 
 export interface CondRegion {
   /** Re-pick and re-render: same branch → guarded update; swap → rebuild. */
@@ -59,25 +59,16 @@ export function createCondRegion(
   // The trailing close anchor keeps its role as the stable insertion point
   // for branch swaps; empty regions emit an adjacent valid pair.
   const environment = getActiveEnvironment();
-  const controller = environment.hydration;
-  const adoptedRange = controller?.claimRange('g', id);
-  const openAnchor =
-    initial?.open ?? adoptedRange?.open ??
-    environment.document.createComment(`mmd:g:${id}`);
-  const anchor =
-    initial?.end ?? (adoptedRange?.end as Comment | undefined) ??
-    environment.document.createComment('/mmd');
+  const openAnchor = initial?.open ?? environment.document.createComment(`mmd:g:${id}`);
+  const anchor = initial?.end ?? environment.document.createComment('/mmd');
   if (initial !== undefined) {
     if (openAnchor.parentNode !== parent || anchor.parentNode !== parent) {
       throw new Error('memo-dom: initial conditional anchors do not belong to their parent');
     }
-  } else if (adoptedRange === undefined) {
+  } else {
     parent.insertBefore(openAnchor, before ?? null);
     parent.insertBefore(anchor, before ?? null);
-  } else {
-    controller!.recordFragmentRange(parent, adoptedRange);
   }
-  let adopting = adoptedRange !== undefined;
   let bindingInitial = initial !== undefined;
   // Each branch is numbered under this region, whenever it is built (`adoption.ts`).
   const scope = reserveCreationScope();
@@ -136,31 +127,9 @@ export function createCondRegion(
       if (disposed) return;
     }
     const factory = branches[idx] ?? null;
-    if (adopting) controller!.pushRange(adoptedRange!);
-    let factoryError: unknown;
-    let factoryFailed = false;
-    try {
-      if (factory !== null) {
-        entry = buildInScope(scope, `b${idx}`, () => factory(bindingInitial ? true : undefined, adopting));
-      }
-    } catch (error) {
-      factoryFailed = true;
-      factoryError = error;
+    if (factory !== null) {
+      entry = buildInScope(scope, `b${idx}`, () => factory(bindingInitial ? true : undefined));
     }
-    if (adopting) {
-      // The primary mismatch error must win over cleanup diagnostics.
-      try {
-        controller!.popRange();
-      } catch (error) {
-        if (!factoryFailed) {
-          factoryFailed = true;
-          factoryError = error;
-        }
-      }
-      adopting = false;
-      if (factoryFailed && recoverBranch(factory, factoryError)) factoryFailed = false;
-    }
-    if (factoryFailed) throw factoryError;
     if (disposed) {
       const returned = entry;
       entry = null;
@@ -186,21 +155,6 @@ export function createCondRegion(
     current = idx;
     bindingInitial = false;
     currentIdentity = nextIdentity;
-  }
-
-  /**
-   * Adoption of this range failed: release what the attempt registered, then
-   * render the branch on the client while the rest of the root keeps adopting.
-   */
-  function recoverBranch(factory: CondBranchFactory | null, error: unknown): boolean {
-    if (controller?.recoverRange === undefined) return false;
-    return controller.recoverRange(adoptedRange!, error, () => {
-      const failed = entry;
-      entry = null;
-      try { failed?.dispose?.(); } catch { /* The mismatch is the reported failure. */ }
-      for (const child of [...(getEntity(id)?.children ?? [])]) unregisterSubtree(child);
-      if (factory !== null) entry = factory();
-    });
   }
 
   function dispose(): void {

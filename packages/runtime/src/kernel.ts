@@ -336,16 +336,7 @@ export function getActiveEnvironment(): RenderEnvironment {
 }
 
 /**
- * Whether detached DOM templates may be cloned for new instances. False in
- * hydrate mode: row factories must claim their server nodes through the
- * document instead of cloning a template built from the first claim.
- */
-export function canReuseTemplate(): boolean {
-  return getActiveApplicationRuntime().state.environment.hydration === undefined;
-}
-
-/**
- * Run `run` in an overridden render environment (mode, document, hydration).
+ * Run `run` in an overridden render environment (mode, document, creations).
  * Restores the previous environment afterwards.
  */
 export function runWithRenderEnvironment<T>(
@@ -360,9 +351,6 @@ export function runWithRenderEnvironment<T>(
     schedule: overrides.schedule !== undefined ? overrides.schedule : previous.schedule,
     effects: overrides.effects ?? previous.effects,
     refs: overrides.refs ?? previous.refs,
-    // An explicit `hydration: undefined` leaves adoption, e.g. for a region
-    // that recovers from a mismatch by rendering on the client.
-    hydration: 'hydration' in overrides ? overrides.hydration : previous.hydration,
     creations: 'creations' in overrides ? overrides.creations : previous.creations,
   };
   try {

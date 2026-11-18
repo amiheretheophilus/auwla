@@ -169,7 +169,7 @@ describe('M0 kernel', () => {
     resetScheduler();
   });
 
-  it('value-cached setter: DOM untouched when value is unchanged', () => {
+  it('a guarded render leaves the DOM untouched when the value is unchanged', () => {
     setScheduler((fn) => fn());
 
     const root = Counter('App/Counter');

@@ -23,7 +23,7 @@ import {
   setScheduler,
   unregister,
   type DocumentLike,
-} from '@memoized-dom/runtime';
+} from '@memoized-dom/runtime/testing';
 
 function makeStubDocument() {
   const created: string[] = [];

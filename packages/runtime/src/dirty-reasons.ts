@@ -74,38 +74,3 @@ export function clearDirtyReasons(store: DirtyReasonStore, id: EntityId): void {
   if (store.size !== 0) store.delete(id);
 }
 
-/**
- * Emitted gate: does a dirty-reason payload cover one of `values`?
- * `null` means full update and `-1` is the wildcard cause, so both open
- * every gate by default. A compiler-proven pull-independent slot passes false
- * for includePull; ordinary causes in a mixed batch still match individually.
- * `values` may be one cause or a readonly array of them.
- */
-export function reasonsHit(
-  reasons: DirtyReasons,
-  values: DirtyReasonInput,
-  includePull = true,
-): boolean {
-  if (reasons === null) return true;
-  if (reasons === -1) return includePull;
-  if (typeof reasons === 'object') {
-    if (includePull && reasons.has(-1)) return true;
-    return typeof values === 'object'
-      ? values.some((value) => reasons.has(value))
-      : reasons.has(values);
-  }
-  return typeof values === 'object'
-    ? values.includes(reasons)
-    : reasons === values;
-}
-
-/** Selective replay is safe only when every pending cause is proven safe. */
-export function reasonsOnly(reasons: DirtyReasons, values: readonly DirtyReason[]): boolean {
-  if (reasons === null || reasons === -1) return false;
-  if (typeof reasons !== 'object') return values.includes(reasons);
-  if (reasons.size === 0) return false;
-  for (const reason of reasons) {
-    if (reason === -1 || !values.includes(reason)) return false;
-  }
-  return true;
-}

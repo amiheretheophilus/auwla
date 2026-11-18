@@ -1,5 +1,9 @@
+/**
+ * Root ownership of `mount`. These ran for the old compiler's initial-HTML mount too, which went
+ * with it (2026-11-18); `mount` on a host without server HTML takes the same path.
+ */
 import { afterEach, beforeEach, expect, it } from 'bun:test';
-import { mountInitial, registerRootFactory, type MountedApplication } from '../packages/runtime/src/mount-core';
+import { registerRootFactory, type MountedApplication } from '../packages/runtime/src/mount-core';
 import { mount } from '../packages/runtime/src/mount';
 import { cleanup } from '../packages/runtime/src/cleanup';
 import {
@@ -24,8 +28,8 @@ function isolated(id: string) {
   return runtime;
 }
 
-it.each([['initial HTML', mountInitial], ['general', mount]] as const)(
-  'unmounts its original runtime after another becomes active (%s)', (_name, attach) => {
+it('unmounts its original runtime after another becomes active', () => {
+  const attach = mount;
   const a = isolated('a'), b = isolated('b');
   const host = document.createElement('div');
   document.body.append(host);
@@ -51,7 +55,7 @@ it.each([['initial HTML', mountInitial], ['general', mount]] as const)(
   expect(host.childNodes).toHaveLength(0);
 });
 
-it('shares duplicate-host and duplicate-root validation with the general mount', () => {
+it('refuses a second root on a host, and the same root on two hosts', () => {
   const runtime = isolated('duplicate');
   const host = document.createElement('div'), other = document.createElement('div');
   document.body.append(host, other);
@@ -61,7 +65,7 @@ it('shares duplicate-host and duplicate-root validation with the general mount',
     return document.createElement('main');
   } });
   runWithApplicationRuntime(runtime, () => {
-    const app = mountInitial(host, App);
+    const app = mount(host, App);
     applications.push(app);
     expect(() => mount(host, App)).toThrow(/already owns/);
     expect(() => mount(other, App)).toThrow(/already mounted/);
@@ -83,12 +87,12 @@ it('cleans a failed factory and allows a later mount', () => {
     return document.createElement('main');
   } });
   runWithApplicationRuntime(runtime, () => {
-    expect(() => mountInitial(host, App)).toThrow('factory failed');
+    expect(() => mount(host, App)).toThrow('factory failed');
     expect(runtime.state.registry.has('App')).toBe(false);
     expect(cleaned).toBe(1);
     expect(host.childNodes).toHaveLength(0);
     fail = false;
-    applications.push(mountInitial(host, App));
+    applications.push(mount(host, App));
   });
 });
 
@@ -106,7 +110,7 @@ it('restores the caller after cleanup fails, removes nodes and stays unmounted',
     });
     return document.createElement('main');
   } });
-  const app = runWithApplicationRuntime(a, () => mountInitial(host, App));
+  const app = runWithApplicationRuntime(a, () => mount(host, App));
   applications.push(app);
   setActiveApplicationRuntime(b);
   expect(() => app.unmount()).toThrow(failure);

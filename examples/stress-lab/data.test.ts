@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { compileModules } from '@memoized-dom/compiler-next';
 import { createDataRuntime, setActiveDataRuntime, type DataRuntime } from '@memoized-dom/data';
-import { _internals, resetAccessTable, resetScheduler, setScheduler, unregister } from '@memoized-dom/runtime/testing';
+import { _internals, resetScheduler, setScheduler, unregister } from '@memoized-dom/runtime/testing';
 
 interface DataCase {
   name: string;
@@ -42,7 +42,6 @@ let previous: DataRuntime | null = null;
 afterEach(() => {
   for (const id of _internals().registry.keys()) unregister(id);
   document.body.replaceChildren();
-  resetAccessTable();
   resetScheduler();
   if (previous !== null) setActiveDataRuntime(previous);
   runtime?.clear();

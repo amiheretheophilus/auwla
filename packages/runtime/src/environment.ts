@@ -14,7 +14,6 @@
  *   hydrate        Phase 3 adoption
  */
 
-import type { HydrationController } from './hydration';
 import type { Creations } from './adoption';
 
 export type RenderMode =
@@ -45,13 +44,6 @@ export interface DocumentLike {
   createDocumentFragment(): DocumentFragment;
   createRange?(): Range;
   getElementById(id: string): Element | null;
-  /**
-   * Optional: materialize compiler-generated static markup into nodes in
-   * compiler creation order. Server document implementations provide this
-   * so emitted markup segments render identically without a DOM parser;
-   * browser documents use the native <template> path instead.
-   */
-  materializeMarkup?(markup: string): Node[];
   /** Experimental compiler-proven leaf output; absent on DOM/hydration tiers. */
   readonly htmlWriter?: {
     create(write: () => string): Node;
@@ -74,7 +66,6 @@ export interface RenderEnvironment {
   schedule: ((fn: () => void) => void) | null;
   effects: Capability;
   refs: Capability;
-  hydration?: HydrationController;
   /**
    * Numbers each node a creation call returns, in program order (`adoption.ts`). A server
    * writes the numbers into its HTML; a browser adopting that HTML takes node N for creation N.
@@ -126,7 +117,6 @@ export function resolveEnvironment(
       overrides.schedule === undefined ? base.schedule : overrides.schedule,
     effects: overrides.effects ?? base.effects,
     refs: overrides.refs ?? base.refs,
-    hydration: overrides.hydration,
     creations: overrides.creations,
   };
 }

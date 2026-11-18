@@ -171,13 +171,3 @@ export function createApplication(host: Element, definition: RootFactoryDefiniti
   catch (error) { unregisterSubtree(definition.id); removeNodes(nodes); throw error; }
   return createMountedApplication(host, definition, nodes);
 }
-
-/** Compiler-only operation for a build-proven initial-HTML entry. */
-export function mountInitial(
-  target: MountTarget, component: MountableComponent,
-  initialize?: (host: Element, definition: RootFactoryDefinition, create: () => MountedApplication) => MountedApplication,
-): MountedApplication {
-  const { host, definition } = resolveMount(target, component);
-  return initialize ? initialize(host, definition, () => createApplication(host, definition))
-    : createApplication(host, definition);
-}

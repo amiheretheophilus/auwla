@@ -1,5 +1,4 @@
 /** General mount detects SSR; its installed capability owns adoption/recovery. */
-import type { HydrationCapabilities } from './hydration';
 import { parseRootHydrationIdentity } from './hydration-marker';
 import {
   resolveMount, createApplication,
@@ -15,7 +14,6 @@ export type {
 } from './mount-core';
 
 interface HydrationRuntimeBridge {
-  capabilities?: HydrationCapabilities;
   hydrate?(
     host: Element,
     definition: RootFactoryDefinition,
@@ -41,20 +39,11 @@ function hydrationRuntimeBridge(): HydrationRuntimeBridge {
 
 /**
  * Installed by the optional '@memoized-dom/runtime/hydrate' entry. Keeping
- * the adoption machinery behind this bridge keeps HydrationDocument out of
- * browser bundles that only ever perform fresh client mounts.
+ * the adoption machinery behind this bridge keeps it out of browser bundles
+ * that only ever perform fresh client mounts.
  */
-export function installHydrationRuntime(
-  hydrate: NonNullable<HydrationRuntimeBridge['hydrate']>,
-  capabilities: HydrationCapabilities = {},
-): HydrationCapabilities {
-  const bridge = hydrationRuntimeBridge();
-  // Independently bundled roots may share this realm. Later narrow programs
-  // must not discard capabilities an earlier root still needs for adoption.
-  const shared = bridge.capabilities ??= {};
-  Object.assign(shared, capabilities);
-  bridge.hydrate = hydrate;
-  return shared;
+export function installHydrationRuntime(hydrate: NonNullable<HydrationRuntimeBridge['hydrate']>): void {
+  hydrationRuntimeBridge().hydrate = hydrate;
 }
 
 function hydrationRootId(host: Element): string | null {

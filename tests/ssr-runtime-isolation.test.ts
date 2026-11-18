@@ -13,21 +13,16 @@ import {
   commit,
   createApplicationRuntime,
   getActiveApplicationRuntime,
-  installAccessTable,
   markDirty,
   register,
-  registerProps,
-  resetAccessTable,
   resetScheduler,
-  resolveWrites,
   runWithApplicationRuntime,
   setActiveApplicationRuntime,
-  setProps,
   setScheduler,
   unregister,
   type Entity,
 } from '@memoized-dom/runtime';
-import { _internals, _propsBox } from '@memoized-dom/runtime/testing';
+import { _internals } from '@memoized-dom/runtime/testing';
 
 function makeEntity(id: string, renders: string[] = []): Entity {
   return {
@@ -180,73 +175,4 @@ describe('application runtime isolation', () => {
     a.dispose();
   });
 
-  it('access tables: static fragments replay into later runtimes, mutable state stays per runtime', () => {
-    const a = createApplicationRuntime('request-a');
-
-    runWithApplicationRuntime(a, () => {
-      installAccessTable(
-        { readers: { './state.ts#count': ['App/Counter'] } },
-        'App',
-      );
-      expect(resolveWrites(['./state.ts#count'], [])).toEqual(['App/Counter']);
-    });
-
-    // Fragments are static build artifacts (installed by compiled modules at
-    // evaluation time), so runtimes created afterwards replay them - that is
-    // how SSR request contexts receive cross-module write routing.
-    const b = createApplicationRuntime('request-b');
-    runWithApplicationRuntime(b, () => {
-      expect(resolveWrites(['./state.ts#count'], [])).toEqual([
-        'App/Counter',
-      ]);
-    });
-
-    // Mutable resolver state is still per runtime: an install scoped to b
-    // never reaches a, and b's tables survive a's existence.
-    runWithApplicationRuntime(b, () => {
-      installAccessTable(
-        { readers: { './state.ts#onlyB': ['App/OnlyB'] } },
-        'App',
-      );
-      expect(resolveWrites(['./state.ts#onlyB'], [])).toEqual(['App/OnlyB']);
-    });
-
-    // Runtime a's own table state survives the other request's existence,
-    // but b's post-creation install is invisible to it.
-    runWithApplicationRuntime(a, () => {
-      expect(resolveWrites(['./state.ts#count'], [])).toEqual(['App/Counter']);
-      expect(resolveWrites(['./state.ts#onlyB'], [])).toEqual([]);
-    });
-
-    resetAccessTable();
-    b.dispose();
-    a.dispose();
-  });
-
-  it('prop boxes are per runtime', () => {
-    const a = createApplicationRuntime('request-a');
-    runWithApplicationRuntime(a, () => {
-      register(makeEntity('App/Child'));
-      registerProps('App/Child', ['alpha']);
-      expect(_propsBox('App/Child')).toEqual(['alpha']);
-    });
-
-    // Another runtime sees no box for the same entity id...
-    const b = createApplicationRuntime('request-b');
-    runWithApplicationRuntime(b, () => {
-      expect(_propsBox('App/Child')).toBeUndefined();
-    });
-    b.dispose();
-
-    // ...and setProps inside b is a dead letter, not a cross-runtime write.
-    const c = createApplicationRuntime('request-c');
-    runWithApplicationRuntime(c, () => {
-      setProps('App/Child', ['beta']);
-    });
-    c.dispose();
-    runWithApplicationRuntime(a, () => {
-      expect(_propsBox('App/Child')).toEqual(['alpha']);
-    });
-    a.dispose();
-  });
 });

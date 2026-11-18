@@ -1,30 +1,12 @@
-/** Isolated owners for compiler-generated bindings over server-owned HTML. */
-import { createApplicationRuntime, getActiveApplicationRuntime, getActiveEnvironment, runWithApplicationRuntime } from './kernel';
+/**
+ * Isolated owners for compiled page components over server-owned HTML. The old compiler's
+ * binding programs (`registerCompiledPage`, with runtime-bound callbacks) went with it on
+ * 2026-11-18.
+ */
+import { createApplicationRuntime, getActiveEnvironment, runWithApplicationRuntime } from './kernel';
 import type { DocumentLike } from './environment';
-import { setProps } from './props';
 import { registerPageBinder } from './page-content';
 import { createPropsCell, valueComponent } from './components';
-
-export function bindRuntimeCallback<T>(callback: T): T {
-  if (typeof callback !== 'function') return callback;
-  const runtime = getActiveApplicationRuntime();
-  return function(this: unknown, ...args: unknown[]) {
-    return runWithApplicationRuntime(runtime, () => Reflect.apply(callback,this,args));
-  } as T;
-}
-
-/** Captured by a compiled factory; calls after await still target its owner. */
-const namespaces = new WeakMap<object,WeakMap<object,object>>();
-export function bindRuntimeNamespace<T extends object>(namespace: T): T {
-  const runtime=getActiveApplicationRuntime();
-  let cached=namespaces.get(runtime);
-  if(!cached)namespaces.set(runtime,cached=new WeakMap());
-  const previous=cached.get(namespace);if(previous)return previous as T;
-  const bound = Object.create(null) as Record<string, unknown>;
-  for (const [name,value] of Object.entries(namespace)) bound[name] = bindRuntimeCallback(value);
-  cached.set(namespace,bound);
-  return bound as T;
-}
 
 let pageInstances = 0;
 
@@ -42,7 +24,7 @@ export function registerPageComponent(key: string, component: Function): void {
   registerPageBinder(key, (root, inputs) => {
     const environment = getActiveEnvironment();
     const runtime = createApplicationRuntime('page:' + key, {
-      ...environment, mode: 'client-create', document: root.ownerDocument as unknown as DocumentLike, hydration: undefined, creations: undefined,
+      ...environment, mode: 'client-create', document: root.ownerDocument as unknown as DocumentLike, creations: undefined,
     });
     const compiled = valueComponent(component) as (id: string, parent: null, props: unknown) => Node;
     const cell = createPropsCell(inputs, [inputs]);
@@ -53,30 +35,6 @@ export function registerPageComponent(key: string, component: Function): void {
     return {
       update(next) { if (!disposed) runWithApplicationRuntime(runtime, () => cell.set(next, [next])); },
       dispose() { if (!disposed) { disposed = true; runtime.dispose(); } },
-    };
-  });
-}
-
-export function registerCompiledPage(key: string, create: (id: string, parent: null, props: unknown[]) => Node, rootId: string): void {
-  registerPageBinder(key, (root, inputs) => {
-    const environment = getActiveEnvironment();
-    // Adoption documents are read cursors, not reusable creation documents.
-    // Future local branches must create real nodes after outer hydration ends.
-    const document = root.ownerDocument;
-    const pageDocument: DocumentLike = {
-      createComment: document.createComment.bind(document), createElement: document.createElement.bind(document),
-      createElementNS: document.createElementNS.bind(document), createTextNode: document.createTextNode.bind(document),
-      createDocumentFragment: document.createDocumentFragment.bind(document),
-      getElementById: id => id === '__mmd_page_root' ? { childNodes:[root] } as unknown as Element : document.getElementById(id),
-      ...(document.createRange ? {createRange:document.createRange.bind(document)} : {}),
-    };
-    const runtime = createApplicationRuntime('page:' + key, { ...environment, mode:'client-create', document:pageDocument, hydration:undefined });
-    let disposed = false;
-    try { runWithApplicationRuntime(runtime, () => create(rootId,null,[inputs])); }
-    catch (error) { runtime.dispose(); throw error; }
-    return {
-      update(next) { if (!disposed) runWithApplicationRuntime(runtime, () => setProps(rootId,[next])); },
-      dispose() { if (!disposed) { disposed=true; runtime.dispose(); } },
     };
   });
 }

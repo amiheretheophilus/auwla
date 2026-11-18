@@ -18,42 +18,25 @@ export function createPreparedRegion(
   const runtime = getActiveApplicationRuntime();
   const inRuntime = <T>(run: () => T): T => runWithApplicationRuntime(runtime, run);
   const environment = getActiveEnvironment();
-  const controller = environment.hydration;
-  const adopted = controller?.claimRange('g', id);
-  const open = adopted?.open ?? environment.document.createComment(`mmd:g:${id}`);
-  const end = adopted?.end ?? environment.document.createComment('/mmd');
-  if (adopted === undefined) { parent.appendChild(open); parent.appendChild(end); }
-  else controller!.recordFragmentRange(parent, adopted);
-  let preserveAdopted = adopted !== undefined;
+  const open = environment.document.createComment(`mmd:g:${id}`);
+  const end = environment.document.createComment('/mmd');
+  parent.appendChild(open);
+  parent.appendChild(end);
   const clear = () => {
     if (open.parentNode === null || open.parentNode !== end.parentNode) return;
     while (open.nextSibling !== null && open.nextSibling !== end) open.parentNode.removeChild(open.nextSibling);
-  };
-  const createContent = () => {
-    if (!preserveAdopted) return create();
-    controller!.pushRange(adopted!);
-    let entry: CondEntry;
-    try {
-      entry = create();
-    } catch (cause) {
-      try { controller!.popRange(); } catch { /* Preserve the primary mismatch. */ }
-      throw cause;
-    }
-    controller!.popRange();
-    return entry;
   };
   // The outer uncommitted generation owns first-mount readiness and lifecycle.
   const enclosing = runtime.state.preparation as RenderPreparation | undefined;
   if (enclosing !== undefined) {
     let entry: CondEntry;
     try {
-      entry = createContent();
-      if (!preserveAdopted) for (const node of entry.nodes) end.parentNode!.insertBefore(node, end);
+      entry = create();
+      for (const node of entry.nodes) end.parentNode!.insertBefore(node, end);
     } catch (cause) {
-      if (!preserveAdopted) { clear(); open.parentNode?.removeChild(open); end.parentNode?.removeChild(end); }
+      clear(); open.parentNode?.removeChild(open); end.parentNode?.removeChild(end);
       throw cause;
     }
-    preserveAdopted = false;
     let disposed = false;
     return {
       get status() { return disposed ? 'disposed' as const : 'active' as const; },
@@ -146,7 +129,7 @@ export function createPreparedRegion(
       }
     };
     // Cursor/mismatch failures belong to mount recovery, never to Group UI.
-    if (preserveAdopted || cause instanceof HydrationMismatchError) throw failure;
+    if (cause instanceof HydrationMismatchError) throw failure;
     releaseFallback();
     clear();
     if (error === undefined) throw failure;
@@ -161,7 +144,7 @@ export function createPreparedRegion(
     if (preparation.readiness === 'error') { fail(preparation.errors[0]); return; }
     if (preparation.readiness !== 'ready') return;
     releaseFallback();
-    if (!preserveAdopted && !published) { clear(); end.parentNode!.insertBefore(detached, end); published=true; }
+    if (!published) { clear(); end.parentNode!.insertBefore(detached, end); published=true; }
     state = 'active';
     unsubscribe();
     const token = generation;
@@ -185,7 +168,7 @@ export function createPreparedRegion(
     releaseFailureWatchers();
     releaseFailureWatchers = () => {};
     releaseFailures();
-    published=preserveAdopted;
+    published=false;
     state = 'pending';
     failure = undefined;
     generation++;
@@ -199,39 +182,17 @@ export function createPreparedRegion(
     releaseFailures = () => current.releaseFailures();
     unsubscribe = preparation.subscribe(check);
     try {
-      content = preparation.run(createContent);
-      if (!preserveAdopted) for (const node of content.nodes) detached.appendChild(node);
-      else if (preparation.readiness !== 'ready') {
-        throw new HydrationMismatchError(id, 'resolved atomic content', preparation.readiness);
-      }
+      content = preparation.run(create);
+      for (const node of content.nodes) detached.appendChild(node);
       check();
-      preserveAdopted = false;
       if (state === 'pending' && pending !== undefined) {
         fallback = pending();
         for (const node of fallback.nodes) end.parentNode!.insertBefore(node, end);
       }
     } catch (cause) {
-      if (recoverAdoption(cause)) return;
       if (!hasFailed()) fail(cause);
       else throw cause;
     }
-  }
-  /**
-   * A mismatch inside this range discards only this range: the failed attempt
-   * is released, then the region renders on the client like a fresh mount
-   * while the rest of the root keeps its server DOM.
-   */
-  function recoverAdoption(cause: unknown): boolean {
-    if (!preserveAdopted || !(cause instanceof HydrationMismatchError) || controller?.recoverRange === undefined) {
-      return false;
-    }
-    unsubscribe();
-    releaseContent();
-    preserveAdopted = false;
-    const settlePrevious = { resolve: resolveReady, reject: rejectReady };
-    controller.recoverRange(adopted!, cause, start);
-    readiness.then(settlePrevious.resolve, settlePrevious.reject);
-    return true;
   }
   function retry(): Promise<void> {
     if (state === 'disposed') return Promise.resolve();
@@ -260,9 +221,7 @@ export function createPreparedRegion(
     rejectReady(new DOMException('Atomic region was disposed', 'AbortError'));
     inRuntime(() => {
       try { release([releaseFallback, releaseContent, releaseFailures]); }
-      finally {
-        if (!preserveAdopted) { clear(); open.parentNode?.removeChild(open); end.parentNode?.removeChild(end); }
-      }
+      finally { clear(); open.parentNode?.removeChild(open); end.parentNode?.removeChild(end); }
     });
   }
   function restart(): void {

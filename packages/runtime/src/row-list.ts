@@ -21,7 +21,7 @@ import { createComputation, publishVersions, runningReadsChanged, trackRead } fr
 import { buildInScope, reserveCreationScope } from './adoption';
 import { readListLength } from './list-values';
 import { iteratedItems } from './list-map';
-import { lisPositions } from './list';
+import { lisPositions } from './list-order';
 import type { RenderOwner } from './render-value';
 
 export interface RowEntry {

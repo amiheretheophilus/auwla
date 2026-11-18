@@ -4,7 +4,6 @@ import { createApplicationRuntime, runWithApplicationRuntime, runWithRenderEnvir
 import { cloneTemplate, createTemplateCache, type TemplateNode } from '../src/markup';
 import type { DocumentLike } from '../src/environment';
 import { adoptRoot, numberedDocument, serverCreations } from '../src/adoption';
-import { HydrationMismatchError } from '../src/hydration-error';
 
 const document = new Window().document as unknown as Document;
 const SVG = 'http://www.w3.org/2000/svg';
@@ -64,16 +63,6 @@ it('follows the destination namespace until foreignObject, and an svg tag starts
       expect(root.querySelector('circle')!.getAttribute('r')).toBe('1');
     }
   }));
-});
-
-// A mismatch, so the hydration's recovery renders on the client in place of the server's HTML.
-it("treats the old compiler's hydration plans, which cannot claim a clone, as a mismatch", () => {
-  runWithApplicationRuntime(createApplicationRuntime(), () => {
-    const cache = createTemplateCache([['p', 0]]);
-    runWithRenderEnvironment({ document: document as unknown as DocumentLike, hydration: {} as never }, () => {
-      expect(() => cloneTemplate(cache)).toThrow(HydrationMismatchError);
-    });
-  });
 });
 
 // `adoption.ts`: a server numbers each clone; a browser takes the server's node when it fits.

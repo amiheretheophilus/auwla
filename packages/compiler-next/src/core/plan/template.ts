@@ -1,8 +1,8 @@
 /**
  * Returned JSX → a template and its sites (`model.ts`).
  *
- * Nodes are numbered in the order `materializeMarkup` returns them: children
- * before their parent, siblings in document order. A dynamic text child gets a
+ * Nodes are numbered in post-order: children before their parent, siblings in
+ * document order. A dynamic text child gets a
  * comment placeholder in the markup, so two neighbouring values (`{a}{b}`)
  * stay two text nodes; the HTML parser would merge two texts into one.
  */

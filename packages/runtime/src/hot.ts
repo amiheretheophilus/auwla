@@ -7,7 +7,6 @@ import {
   unregisterSubtree,
   type EntityId,
 } from './kernel';
-import { uninstallAccessTable } from './access';
 import { rootNodes } from './jsx-dom';
 import { installComponentHooks, type ComponentMount } from './components';
 import { mountStore } from './mount-core';
@@ -273,9 +272,8 @@ export function moduleEvaluating(path: string): void {
   unregisterSubtree(`mmd:effects:${path}`);
 }
 
-/** Remove stale module-owned singleton entities and analysis before reevaluation. */
+/** Remove stale module-owned singleton entities before reevaluation. */
 export function disposeHotModule(moduleId: string, rootId: EntityId): void {
-  uninstallAccessTable(moduleId);
   const encoded = encodeURIComponent(moduleId);
   const computed = `${rootId}/$computed/${encoded}#`;
   const effects = `${rootId}/$module-effects/${encoded}/`;

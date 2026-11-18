@@ -415,13 +415,23 @@ array child). Remove each check when its phase is built.
      compiler's own features went (`ssr/writer.ts`, `installed-packages`); hacker-news, octopulse
      and server-pages use JavaScript conditionals; stress-lab's tests run on compiler-next
      (`testing.md`, "The examples on compiler-next").
-  6. [ ] `packages/compiler` is deleted, with the runtime, server and data code only its output
-     reached. Done first (2026-11-18): the package and `evaluation/` (a study of the old linker,
+  6. [x] `packages/compiler` is deleted, with the runtime, server and data code only its output
+     reached. First (2026-11-18): the package and `evaluation/` (a study of the old linker,
      whose `vendor/` copy was never in the repository) are gone; its JSX type tests moved to
      compiler-next (`tests/jsx-types`, `tsconfig.jsx.json`, `bun run typecheck:jsx`); what named the
      package now names `@memoized-dom/compiler-next`, and `paths` map `@memoized-dom/compiler/jsx` to
-     its `src/jsx-types.ts`. The bench baselines still take the old compiler from `d6e678b`. Left:
-     the runtime, server and data code only the old output reached.
+     its `src/jsx-types.ts`. The bench baselines still take the old compiler from `d6e678b`.
+     Then the runtime: what compiler-next emits (`$$runtime.x`, `_MD.x` in its templates and in the
+     suite's compiled output) and what other packages import was kept, and an esbuild bundle of
+     that surface showed which files contribute nothing. Gone: the list region and its positional
+     variant, initial-HTML bindings and `mountInitial`, the claim-plan hydration (`hydration.ts`
+     and its list and markup claims, `environment.hydration`), the access table, event commits,
+     state cells, delegated events, list keys and list update reasons, the props box, the
+     value-cached setters, the content region, the old page binders, `materializeMarkup` and
+     conditional effects. `lisPositions` moved to `list-order.ts` for the row list. Tests of
+     those went with them; tests of live behaviour they reached were ported (`mount-ownership`,
+     `initial-payload`, `page-content`, `progressive-page-content`, `kernel-commit`). The server
+     and data packages had no code that only the old output reached.
   7. [ ] compiler-next is renamed `packages/compiler` (`@memoized-dom/compiler`); `docs/` follows.
 
 ## Later

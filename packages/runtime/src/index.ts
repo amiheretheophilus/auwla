@@ -5,6 +5,10 @@
  * primitive through the `MD.` namespace, so this barrel must re-export the
  * full runtime surface. Ordinary browser entries additionally import mount;
  * reactive and emission primitives remain compiler-owned.
+ *
+ * The operations only the old compiler's output called (its access table,
+ * event commits, state cells, setters, list keys, page binders and effect
+ * registration) went with it on 2026-11-18.
  */
 
 export {
@@ -31,49 +35,37 @@ export {
   setActiveApplicationRuntime,
   runWithApplicationRuntime,
   getActiveEnvironment,
-  canReuseTemplate,
   runWithRenderEnvironment,
 } from './kernel';
 export { createStorage, type StorageShim } from './async-storage';
-export { keepDerived, takeKeptDerived } from './derived-edits';
 export type {
   ApplicationRuntime,
   DirtyReasonInput,
   DirtyReasons,
   Entity,
 } from './kernel';
-export { reasonsHit, reasonsOnly } from './dirty-reasons';
 export type {
   Capability,
   DocumentLike,
   RenderEnvironment,
   RenderMode,
 } from './environment';
-export {
-  defineStateCell,
-  readCell,
-  setCell,
-  updateCell,
-} from './state-cells';
-export type { StateCell } from './state-cells';
 export { cleanup, ownCleanup } from './cleanup';
 export { readPreparationScope, releasePreparationRead } from './preparation-read';
 export { createPreparedRegion } from './prepared-region';
-export { createContentRegion } from './content-region';
-export { isPageContent, acceptPageContent, registerPageBinder } from './page-content';
-export type { PageContent, PageBinder, PageBindingHandle } from './page-content';
-export { bindRuntimeCallback, bindRuntimeNamespace, registerCompiledPage, registerPageComponent } from './page-bindings';
+export { isPageContent, acceptPageContent } from './page-content';
+export type { PageContent } from './page-content';
+export { registerPageComponent } from './page-bindings';
 export { encodePageHtml, decodePageHtml, encodePageFrame, encodePageFailure, decodePageFrames } from './page-html';
 export { collectRenderReadiness } from './render-readiness';
 export { toPresentationError, type PresentationError, type PresentationErrorKind } from './presentation-error';
 export type { CleanupDisposer } from './cleanup';
-export { mountRef, refAssign, assignRef, isRefNode } from './refs';
+export { mountRef, assignRef, isRefNode } from './refs';
 export type { RefCallback, RefValue } from './refs';
-export { registerConditionalEffect, registerEffect } from './effect';
 export { createEffectScope, ownedEffect, ownedCleanup, ownCleanups } from './effect-scope';
-export type { EffectCallback, EffectCondition } from './effect';
+export type { EffectCallback } from './effect';
 
-export { materializeMarkup, cloneTemplate, createTemplateCache } from './markup';
+export { cloneTemplate, createTemplateCache } from './markup';
 export type { TemplateCache } from './markup';
 export {
   createWriteBatch, rejectConstAssignment, unchangedWrite, flushWritesBeforeAwait, resumeWritesAfterAwait,
@@ -91,65 +83,21 @@ export { createComputation, noteOwnOutput, observeNamespace, readNamespace, trac
 export { createSharedWrites } from './shared-writes';
 export { prepareRequestModuleStates, registerWaitingModuleState, requestModuleState } from './module-state';
 export type { BuildScope, BuildFrame } from './build-scope';
-export { adoptInitialRoot } from './initial-root';
-export { bindInitialNodes } from './initial-bindings';
-export { bindInitialListNodes } from './initial-list-bindings';
-export { bindInitialRegionNodes } from './initial-region-bindings';
-export { bindInitialList } from './initial-list';
-export { bindInitialInputValue } from './initial-input';
 
 export {
-  setText,
   setTextData,
   setListener,
   setRowListener,
   setAttributeValue,
   setClassAttribute,
-  joinText,
   textValue,
-  setClassName,
-  setClass,
-  setAttr,
-  setProp,
-  setStyle,
-  computedChanged,
-  effectAssignmentChanged,
 } from './setters';
-export type { SlotCache } from './setters';
 
-export {
-  installAccessTable,
-  resetAccessTable,
-  uninstallAccessTable,
-  resolveWrites,
-  resolveStaticWrites,
-  isOpaque,
-  getRootId,
-} from './access';
-export type { AccessTable } from './access';
-
-export {
-  commitStructuralWrites,
-  commitListItemWrites,
-  commitWrites,
-  commitWritesWithPayload,
-  handle,
-  getEventLog,
-  clearEventLog,
-} from './events';
-export type { EventRecord } from './events';
-
-export { createListRegion } from './list';
-export { createPositionalListRegion } from './list-positional';
-export type { ListRegion, ListEntry, KeyFn } from './list';
-export { isStructuralListUpdate, listItemIndices, createListProvenance, evaluateListOperation } from './list-update';
 export { rootNodes } from './jsx-dom';
-export { decodeListKey, encodeListKey } from './list-keys';
 export { HydrationMismatchError } from './hydration-error';
 export { mount, mountOnce } from './mount';
-export { mountInitial, registerRootFactory, rootFactoryStore, whileApplicationMounted } from './mount-core';
+export { registerRootFactory, rootFactoryStore, whileApplicationMounted } from './mount-core';
 export type { ApplicationLifetime } from './mount-core';
-export { initializePayload } from './payload';
 export type {
   MountableComponent,
   MountOptions,
@@ -157,16 +105,10 @@ export type {
   MountedApplication,
   RootMountContext,
 } from './mount';
-export {
-  createDelegatedEventBinding,
-  setDelegatedEvent,
-  type DelegatedEventBinding,
-} from './delegated-events';
-export { patchDomProps, setDomValue } from './dom-props';
-export { classValue, setClassValue, setStyleValue } from './dom-values';
+export { setStyleValue } from './dom-values';
 export { createCondRegion } from './cond';
 export {
-  createRenderValue, createKeyedRenderValue, createPresentationValue, createValueSlot, createIndexedValueSlot, disposedValueSlot, renderNamespace,
+  createRenderValue, createKeyedRenderValue, createPresentationValue, createValueSlot, createIndexedValueSlot, renderNamespace,
   childSlot, disposeSlot, fuseText, disposeFused,
 } from './render-value';
 export {
@@ -175,5 +117,4 @@ export {
 } from './components';
 export { publishVersions } from './computation';
 export { noteCodeFromText, publishGlobal, trackGlobal } from './globals';
-export { registerProps, setProps } from './props';
 export type { CondRegion, CondEntry, CondBranchFactory } from './cond';

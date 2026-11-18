@@ -6,7 +6,6 @@
  */
 
 import type { DocumentLike } from '@memoized-dom/runtime';
-import { parseMarkup, type MarkupChild } from '@memoized-dom/runtime/server';
 
 const TEXT_ESCAPE = /[&<>]/;
 const ATTRIBUTE_ESCAPE = /[&"<>]/;
@@ -612,11 +611,6 @@ for (const [property, attribute] of REFLECTED_BOOLEANS) {
   });
 }
 
-// Markup segments are compiler-emitted module constants, so the set is bounded
-// by application code. Parsed descriptors are read-only; reuse them across
-// requests instead of re-parsing every segment on every render.
-const PARSED_MARKUP = new Map<string, readonly MarkupChild[]>();
-
 export class StringDocument implements DocumentLike {
   htmlWriter = HTML_WRITER;
 
@@ -640,43 +634,6 @@ export class StringDocument implements DocumentLike {
 
   createDocumentFragment(): DocumentFragment {
     return new StringFragment() as unknown as DocumentFragment;
-  }
-
-  /**
-   * Interpret compiler-generated markup through StringNode factories so
-   * emitted markup segments serialize identically to imperative creation.
-   * Returns nodes in compiler creation order (post-order; root last).
-   */
-  materializeMarkup(markup: string): Node[] {
-    const output: Node[] = [];
-    const build = (node: MarkupChild): Node => {
-      if (node.type === 'text') {
-        const text = this.createTextNode(node.text) as unknown as Node;
-        output.push(text);
-        return text;
-      }
-      const element =
-        node.ns === HTML_NAMESPACE
-          ? this.createElement(node.tag)
-          : this.createElementNS(node.ns, node.tag);
-      for (const [name, value] of node.attrs) {
-        element.setAttribute(name, value);
-      }
-      for (const child of node.children) {
-        element.appendChild(build(child));
-      }
-      output.push(element as unknown as Node);
-      return element as unknown as Node;
-    };
-    let parsed = PARSED_MARKUP.get(markup);
-    if (parsed === undefined) {
-      parsed = parseMarkup(markup);
-      PARSED_MARKUP.set(markup, parsed);
-    }
-    for (const child of parsed) {
-      build(child);
-    }
-    return output;
   }
 
   getElementById(): Element | null {

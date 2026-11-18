@@ -1,15 +1,13 @@
-/** General adoption uses the same payload handoff as fixed initial bindings. */
+/** Adoption of server HTML, with the payload handoff (`payload.ts`). */
 import { installHydrationRuntime } from './mount';
-import { hydrateApplicationRoot, type HydrationCapabilities } from './hydration';
 import { HydrationMismatchError } from './hydration-error';
 import { initializePayload } from './payload';
-import { rootNodes } from './jsx-dom';
-import { createApplication, createMountedApplication } from './mount-core';
+import { createApplication } from './mount-core';
 import { adoptRoot, carriesCreations } from './adoption';
 import { parseRootHydrationIdentity } from './hydration-marker';
 
-export function installProgramHydration(capabilities: HydrationCapabilities): void {
-  const shared = installHydrationRuntime((host, definition, serverRootId, options) => {
+export function installProgramHydration(): void {
+  installHydrationRuntime((host, definition, serverRootId, options) => {
     try {
       if (serverRootId !== definition.id) {
         throw new HydrationMismatchError(
@@ -18,33 +16,24 @@ export function installProgramHydration(capabilities: HydrationCapabilities): vo
           `<!--mmd:r:${serverRootId}-->`,
         );
       }
-      // compiler-next's server HTML numbers its nodes: the client render takes them (`adoption.ts`).
+      // The server numbers the nodes it made, and the client render takes them (`adoption.ts`).
+      // HTML without numbers came from the old compiler, which went on 2026-11-18, and its
+      // claim plans with it: such a root is mounted again from nothing.
       const range = rootRange(host);
-      if (range !== null && carriesCreations(range.open)) {
-        return initializePayload(host, definition, () => adoptRoot(
-          range.open, range.end, () => createApplication(host, definition),
-          (error) => options.onHydrateError?.(error, 'region'),
-        ));
+      if (range === null || !carriesCreations(range.open)) {
+        throw new HydrationMismatchError(definition.id, 'numbered server HTML', 'server HTML without numbers');
       }
-      return initializePayload(host, definition, () => {
-        const adopted = hydrateApplicationRoot(host, definition, shared);
-        const mounted = createMountedApplication(
-          host, definition, rootNodes(adopted.root), adopted.disposeMarkers,
-        );
-        for (const error of adopted.recovered) options.onHydrateError?.(error, 'region');
-        return mounted;
-      }, error => error instanceof HydrationMismatchError);
+      return initializePayload(host, definition, () => adoptRoot(
+        range.open, range.end, () => createApplication(host, definition),
+        (error) => options.onHydrateError?.(error, 'region'),
+      ));
     } catch (caught) {
       if (!(caught instanceof HydrationMismatchError)) throw caught;
-      // A clone refusing the old markers (`cloneTemplate`) cannot know which root it is in.
-      const error = caught.boundary === 'template'
-        ? new HydrationMismatchError(definition.id, caught.expected, caught.actual)
-        : caught;
-      options.onHydrateError?.(error, 'root');
+      options.onHydrateError?.(caught, 'root');
       host.innerHTML = '';
       return createApplication(host, definition);
     }
-  }, capabilities);
+  });
 }
 
 /** The server root's marker pair among the host's children. */
@@ -60,6 +49,4 @@ function rootRange(host: Element): { open: Node; end: Node } | null {
   return open === null || end === null || end === open ? null : { open, end };
 }
 
-export { hydrateList } from './hydration-list';
-export { hydrateMarkup } from './hydration-markup';
 export { adoptRoot } from './adoption';

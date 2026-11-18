@@ -1,40 +1,15 @@
 /**
  * @file setters.ts
- * M1 — Value-cached setter helpers.
+ * DOM writes for compiled sites: text, listeners, attributes and classes.
  *
- * Every dynamic DOM write in compiled output goes through one of these.
- * The guard (previous-value comparison) lives HERE, in one place, instead of
- * being emitted inline at every call site.
- *
- * Contract with the compiler (M5):
- *   - each dynamic slot gets a unique cache key within the component's `$`
- *   - the creation branch calls the SAME helpers as the update branch, so the
- *     value cache is always seeded with exactly what was written
- *     (the invariant M0's failing test taught us — now structural, not a rule)
- *
- * Semantics:
- *   - guards use strict equality on the RAW value (===)
- *   - NaN never compares equal -> always writes (documented, acceptable)
- *   - objects compare by identity -> new reference means "changed"
+ * The old compiler's value-cached setters (`setText`, `setAttr`, `setClass`, `setProp`,
+ * `setStyle`, with a per-component slot cache) went with that compiler on 2026-11-18;
+ * compiler-next compares values at each site before writing.
  */
 
 import { classValue } from './dom-values';
 import { isAriaAttribute, isHtmlBooleanAttribute } from './html-attributes';
 import { batchlessListener, type WriteBatch } from './write-batch';
-
-export type SlotCache = Record<string, unknown>;
-
-/** Text node data. null/undefined/booleans render as empty string (JSX semantics). */
-export function setText(
-  $: SlotCache,
-  key: string,
-  node: Text,
-  value: unknown,
-): void {
-  if ($[key] === value) return;
-  $[key] = value;
-  node.data = value == null || typeof value === 'boolean' ? '' : String(value);
-}
 
 /**
  * Seed a dynamic text node, including one adopted from server markup, or update
@@ -100,7 +75,7 @@ export function joinText(parts: readonly unknown[]): string {
   return text;
 }
 
-/** Attribute sites share cached-setter boolean/ARIA rules; nullish values omit. */
+/** Attribute sites: nullish values omit; boolean and ARIA rules as below. */
 export function setAttributeValue(node: Element, name: string, value: unknown): void {
   const omitFalse = value === false && !isAriaAttribute(name);
   if (value == null || omitFalse) {
@@ -139,116 +114,4 @@ export function setClassAttribute(node: Element, value: unknown): void {
 /** Normalize a dynamic text slot before comparing its cached value. */
 export function textValue(value: unknown): string {
   return value == null || typeof value === 'boolean' ? '' : String(value);
-}
-
-/** Full className string replacement. */
-export function setClassName(
-  $: SlotCache,
-  key: string,
-  el: HTMLElement,
-  value: string,
-): void {
-  if ($[key] === value) return;
-  $[key] = value;
-  el.className = value;
-}
-
-/** Toggle a single class by boolean condition. */
-export function setClass(
-  $: SlotCache,
-  key: string,
-  el: HTMLElement,
-  name: string,
-  cond: boolean,
-): void {
-  if ($[key] === cond) return;
-  $[key] = cond;
-  el.classList.toggle(name, cond);
-}
-
-/**
- * Attribute write.
- * null / undefined / false -> attribute removed.
- * true -> present with empty value (HTML boolean-attribute convention).
- */
-export function setAttr(
-  $: SlotCache,
-  key: string,
-  el: Element,
-  name: string,
-  value: unknown,
-): void {
-  if ($[key] === value) return;
-  $[key] = value;
-  const html = el.namespaceURI !== 'http://www.w3.org/2000/svg';
-  const omitFalse = value === false && !isAriaAttribute(name);
-  if (value == null || omitFalse) el.removeAttribute(name);
-  else if (value === true) {
-    el.setAttribute(name, html && isHtmlBooleanAttribute(name) ? '' : 'true');
-  }
-  else el.setAttribute(name, String(value));
-}
-
-/**
- * DOM property write (input.value, checkbox.checked, ...).
- * Bypasses attributes entirely — for state that lives on the element object.
- */
-export function setProp(
-  $: SlotCache,
-  key: string,
-  obj: object,
-  prop: string,
-  value: unknown,
-): void {
-  if ($[key] === value) return;
-  $[key] = value;
-  (obj as Record<string, unknown>)[prop] = value;
-}
-
-/**
- * Inline style property (kebab-case name, e.g. 'background-color').
- * null / undefined -> property removed.
- */
-export function setStyle(
-  $: SlotCache,
-  key: string,
-  el: HTMLElement,
-  prop: string,
-  value: string | null | undefined,
-): void {
-  if ($[key] === value) return;
-  $[key] = value;
-  if (value == null) el.style.removeProperty(prop);
-  else el.style.setProperty(prop, value);
-}
-
-/**
- * R13: primitives compare by Object.is and distinct primitive arrays compare
- * element-wise. Mutable references propagate because identity cannot reveal
- * an in-place change.
- */
-export function computedChanged(prev: unknown, next: unknown): boolean {
-  if (Array.isArray(prev) && Array.isArray(next)) {
-    if (prev === next) return true;
-    if (prev.length !== next.length) return true;
-    for (let i = 0; i < prev.length; i++) {
-      if (!Object.is(prev[i], next[i])) return true;
-      if (isMutableReference(prev[i])) return true;
-    }
-    return false;
-  }
-  if (isMutableReference(prev) || isMutableReference(next)) return true;
-  return !Object.is(prev, next);
-}
-
-/** Equal plain assignments inside effects do not create feedback work. */
-export function effectAssignmentChanged(prev: unknown, next: unknown): boolean {
-  return !Object.is(prev, next);
-}
-
-function isMutableReference(value: unknown): boolean {
-  return (
-    (typeof value === 'object' && value !== null) ||
-    typeof value === 'function'
-  );
 }

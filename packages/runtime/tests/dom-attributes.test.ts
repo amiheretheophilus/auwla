@@ -1,22 +1,17 @@
 import { expect, it } from 'bun:test';
 import { Window } from 'happy-dom';
-import { setAttr, setAttributeValue } from '../src/setters';
+import { setAttributeValue } from '../src/setters';
 
 const document = new Window().document as unknown as Document;
 
 for (const namespace of ['http://www.w3.org/1999/xhtml', 'http://www.w3.org/2000/svg']) {
-  it(`keeps ARIA booleans as text in cached and uncached ${namespace} attribute sites`, () => {
-    const cached = document.createElementNS(namespace, 'button');
-    const uncached = document.createElementNS(namespace, 'button');
-    const slots = {};
-
+  it(`keeps ARIA booleans as text in ${namespace} attribute sites`, () => {
+    const element = document.createElementNS(namespace, 'button');
     for (const [value, expected] of [
       [false, 'false'], [true, 'true'], [undefined, null], [false, 'false'], [null, null],
     ] as const) {
-      setAttr(slots, 'pressed', cached, 'aria-pressed', value);
-      setAttributeValue(uncached, 'aria-pressed', value);
-      expect(cached.getAttribute('aria-pressed')).toBe(expected);
-      expect(uncached.getAttribute('aria-pressed')).toBe(expected);
+      setAttributeValue(element, 'aria-pressed', value);
+      expect(element.getAttribute('aria-pressed')).toBe(expected);
     }
   });
 }

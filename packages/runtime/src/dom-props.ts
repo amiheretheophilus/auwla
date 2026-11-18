@@ -128,22 +128,6 @@ function forgetRepeatedAttributes(next: Record<string, unknown>, previous: Map<s
   }
 }
 
-/** Set one mapped JSX DOM value outside a spread-bearing element. */
-export function setDomValue(
-  element: Element,
-  name: string,
-  value: unknown,
-): void {
-  if (name === 'class' || name === 'className') {
-    setClassValue(element, value);
-    return;
-  }
-  if (name === 'style') {
-    setStyleValue(element, value);
-    return;
-  }
-  setScalarDomValue(element, name, value);
-}
 
 function applyDomProp(
   element: Element,
@@ -233,6 +217,19 @@ function setEvent(
 function eventType(key: string): string {
   const lowered = key.slice(2).toLowerCase();
   return EVENT_NAMES[lowered] ?? lowered;
+}
+
+/** Set one mapped JSX DOM value. */
+function setDomValue(element: Element, name: string, value: unknown): void {
+  if (name === 'class' || name === 'className') {
+    setClassValue(element, value);
+    return;
+  }
+  if (name === 'style') {
+    setStyleValue(element, value);
+    return;
+  }
+  setScalarDomValue(element, name, value);
 }
 
 function setScalarDomValue(

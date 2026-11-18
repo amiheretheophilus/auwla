@@ -1,9 +1,6 @@
-/** Remote render values reuse existing anchored conditional ownership. */
-import { createCondRegion } from './cond';
+/** Server page content shown in a compiled child site (`render-value.ts`). */
 import { getActiveEnvironment } from './kernel';
-import { isRenderablePage as isPageContent, pageBinder, pageBindingInputs, type PageBindingHandle, type PageContent } from './page-content';
-import { textValue } from './setters';
-import { HydrationMismatchError } from './hydration-error';
+import { pageBinder, pageBindingInputs, type PageBindingHandle, type PageContent } from './page-content';
 import { updatePageRegions } from './page-regions';
 
 /**
@@ -52,8 +49,7 @@ export interface MountedPage {
 }
 
 /**
- * Mounts server page content, as `createContentRegion` does for the old compiler: its HTML,
- * bound by its registered program when it has one. Later content of the same bound page gives
+ * Mounts server page content: its HTML, bound by its registered program when it has one. Later content of the same bound page gives
  * that program new inputs, keeping its local state; a later generation of a progressive page
  * fills in its regions.
  */
@@ -87,60 +83,3 @@ export function mountPage(value: PageContent): MountedPage {
   };
 }
 
-export function createContentRegion(parent: Node, id: string, read: () => unknown) {
-  let value: unknown;
-  let binding: PageBindingHandle | undefined;
-  let active: unknown;
-  let identity: unknown;
-  let pageRoot: Element | undefined;
-  let holding = false;
-  const region = createCondRegion(parent, id, () => {
-    value = read();
-    holding = false;
-    if (isPageContent(value) && isPageContent(active) && value.progress) {
-      if (value.id === active.id && value.progress.id === active.progress?.id) return 0;
-      // Revalidation/replacement keeps the committed generation until the new
-      // one is complete. A first visit still displays its available shell.
-      if (!value.progress.complete) { holding = true; return 0; }
-    }
-    // Reuse a compatible binding program: new server inputs update its guarded
-    // bindings without resetting independent local state. A different contract
-    // or a noninteractive render replaces the range and drains the old owner.
-    if (isPageContent(value) && isPageContent(active) && binding &&
-        value.id === active.id && value.binding?.key === active.binding?.key) {
-      return 0;
-    }
-    identity = value;
-    return value == null || typeof value === 'boolean' ? -1 : 0;
-  }, [(_adoptingInitial, hydrating) => {
-    const environment = getActiveEnvironment();
-    active = value;
-    let nodes: Node[];
-    if (hydrating && environment.hydration?.claimOpaqueContent) {
-      nodes = environment.hydration.claimOpaqueContent();
-      if (isPageContent(value) && value.html && nodes.length === 0) throw new HydrationMismatchError(id,'server-owned HTML','an empty range');
-    } else if (isPageContent(value)) {
-      const initialPage = value;
-      nodes = pageNodes(value, () => isPageContent(active) ? active : initialPage);
-    } else nodes = [environment.document.createTextNode(textValue(value))];
-    pageRoot = !environment.mode.startsWith('server-') && isPageContent(value) && value.progress ? progressRoot(nodes) : undefined;
-    if (isPageContent(value) && value.binding && !environment.mode.startsWith('server-')) binding = bindPage(value, nodes);
-    return {
-      nodes,
-      update() {
-        if (holding) return;
-        if (isPageContent(active) && isPageContent(value) && active.progress && value.progress && value !== active &&
-            active.progress?.id === value.progress?.id) {
-          if (pageRoot && !environment.mode.startsWith('server-')) updatePageRegions(pageRoot, active, value);
-          active = value;
-        }
-        if (binding && isPageContent(value) && value !== active) {
-          binding.update(pageBindingInputs(value.binding!));
-          active = value;
-        }
-      },
-      dispose() { const previous = binding; binding = undefined; previous?.dispose(); active = undefined; pageRoot = undefined; },
-    };
-  }], () => identity);
-  return region;
-}

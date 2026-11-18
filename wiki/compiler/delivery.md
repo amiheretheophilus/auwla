@@ -197,10 +197,10 @@ Focus, the window's scroll, each element's scroll and a playing medium's time an
 script cannot prevent; this is a decision for the user (`../open-issues.md`).
 
 `mount` adopts when the root range holds a numbered node (`carriesCreations`, `hydrate-program.ts`),
-and otherwise uses the old compiler's hydration, which goes with that compiler. compiler-next output
-meeting the old markers without numbers is a mismatch (`cloneTemplate` throws `HydrationMismatchError`),
-so that hydration's own recovery reports it to `onHydrateError` and renders on the client in place of
-the server's HTML. A root whose content starts with a value slot (a `Group`, a list) opens with that
+and otherwise reports a mismatch to `onHydrateError` (`'root'`) and mounts the root again from nothing.
+The old compiler's claim-plan hydration (`hydration.ts`, its list and markup claims, and the
+`environment.hydration` branches in conditionals, prepared regions and markup) went with that
+compiler on 2026-11-18. A root whose content starts with a value slot (a `Group`, a list) opens with that
 slot's anchors (`mmd:list`, `mmd:value`), so its first number comes after them. Before 2026-11-18 only
 the first node was looked at, and such a root was mounted again from nothing, asking again for a
 source that had failed on the server (`tests/delivery/adopt.test.ts`, "takes a root that starts with a
