@@ -65,6 +65,7 @@ export interface NavigationEventLike extends Event {
   readonly canIntercept: boolean;
   readonly destination: NavigationDestinationLike;
   readonly downloadRequest?: string | null;
+  readonly formData?: FormData | null;
   readonly hashChange: boolean;
   readonly navigationType: 'push' | 'replace' | 'reload' | 'traverse';
   scroll?(): void;
@@ -904,9 +905,11 @@ export function createRouteRuntime(
     const navigationEvent = event as NavigationEventLike;
     // A reload loads the document again, as the person (or `location.reload()`, such as
     // Vite clearing its error overlay) asked. Intercepting it would only re-render this one.
+    // A POST form also needs its native request to reach the server.
     if (
       !navigationEvent.canIntercept ||
       navigationEvent.navigationType === 'reload' ||
+      navigationEvent.formData != null ||
       navigationEvent.downloadRequest !== null &&
       navigationEvent.downloadRequest !== undefined
     ) return;

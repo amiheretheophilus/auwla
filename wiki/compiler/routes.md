@@ -28,6 +28,9 @@ route region gets the same tracking, adoption and delivery as any conditional:
   `Story` afresh, while a layout above it stays mounted. A query or hash change keeps it.
 - `route-to` becomes `href`; with params, a query or a hash it is built by the router's
   `buildRoutePath`. The router's click handler makes a click on it navigate in place.
+- Native POST forms stay browser-owned in the Navigation API path. A navigation with
+  `NavigateEvent.formData` bypasses route interception, so the server receives
+  the submitted body and can return cookies or redirects.
 - The module of each root component (one no other component calls) installs the route table at
   its top with one call, `installRouteTable([...])`. A table held in a module binding would be
   state the compiler follows, and cost far more code.

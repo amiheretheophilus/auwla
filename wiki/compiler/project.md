@@ -283,6 +283,8 @@ plugin only connects compiler-next's results to Vite (`../rules.md`, rule 17).
   `routeStyles`, refreshed with each document, which the server links as after a build. Until
   2026-11-17 every route's stylesheets were linked on every page, so in development one route's
   rules applied to another (a regression from the old plugin, which matched routes itself).
+  The Vite adapter resolves direct requests for compiler-generated CSS from the compiled asset
+  list, even before a JavaScript importer loads. The browser can apply scoped styles on first paint.
 - **Source maps** name each source as a file, which Vite makes relative to the module, so the
   browser finds `App.tsx` beside `/src/App.tsx` (compiler-next's project paths would have named
   `/src/src/App.tsx`).

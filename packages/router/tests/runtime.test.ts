@@ -768,6 +768,7 @@ describe('route runtime', () => {
     dispatch({ canIntercept: false });
     dispatch({ destination: { url: 'https://example.com/external' } });
     dispatch({ downloadRequest: '' });
+    dispatch({ formData: new FormData() });
     expect(runtime.route.pathname).toBe('/');
     expect(intercept).not.toHaveBeenCalled();
 

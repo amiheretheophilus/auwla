@@ -21,7 +21,7 @@
  *   entry is compiler-next's `hostEntryModule`; the native dev launcher is `dev.ts`, through `api`.
  */
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { normalizePath, searchForWorkspaceRoot } from 'vite';
 import type { DevEnvironment, EnvironmentModuleNode, Plugin, ResolvedConfig, ViteDevServer } from 'vite';
 import {
@@ -305,6 +305,17 @@ export function memoizedDom(options: MemoizedDomViteOptions): Plugin {
       if ((resolveOptions as { scan?: boolean }).scan === true) return null;
       if (id === integrationVirtualId && serverEntry !== undefined) return resolvedIntegrationVirtualId;
       if (id === productionEntryVirtualId && serverEntry !== undefined) return resolvedProductionEntryVirtualId;
+      const filename = cleanId(id);
+      if (config?.command === 'serve' && filename.endsWith('.css') && isAbsolute(filename)) {
+        // Direct SSR stylesheet links can arrive before Vite has seen their JS importer.
+        resolver ??= contextResolver(this);
+        const program = programOf(await built(), this.environment.name);
+        if (!program?.ok) return null;
+        const candidates = [pathOf(filename)];
+        if (filename.startsWith('/')) candidates.push(pathOf(fileOf('.' + filename)));
+        const found = candidates.find(path => program.css?.[path] !== undefined);
+        return found === undefined ? null : fileOf(found) + id.slice(filename.length);
+      }
       if (importer === undefined || !id.startsWith('.') || importer.startsWith('\0')) return null;
 
       // A relative import from a compiled module may name one that exists only in the build.

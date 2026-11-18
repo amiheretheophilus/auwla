@@ -56,6 +56,36 @@ export const greeting = define.function({ get: async (_context, name: string) =>
 }
 
 describe('backend-owned fullstack integration', () => {
+  it('serves a scoped SSR stylesheet before the browser requests its module', async () => {
+    const root = await project();
+    await writeFile(join(root, 'src/App.auwla'), `
+      <style>h1 { color: rgb(12, 34, 56); }</style>
+      export function App() { return <h1>"Styled on first paint"</h1>; }
+    `);
+    await writeFile(join(root, 'src/main.ts'), `
+      import { mount } from '@memoized-dom/runtime';
+      import { App } from './App.auwla';
+      mount('root', App);
+    `);
+    await writeFile(join(root, 'server.ts'), backend('before').replace('./src/App', './src/App.auwla'));
+
+    development = await createDevServer({
+      root, configFile: false, logLevel: 'silent',
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server' })],
+      server: { port: 0 },
+    });
+    const html = await (await fetch(development.origin)).text();
+    expect(html).toContain('Styled on first paint');
+    expect(html).toContain('<link rel="stylesheet" href="/src/App.auwla.css"');
+
+    const stylesheet = await fetch(development.origin + '/src/App.auwla.css', {
+      headers: { Accept: 'text/css,*/*;q=0.1' },
+    });
+    expect(stylesheet.status).toBe(200);
+    expect(stylesheet.headers.get('content-type')).toContain('text/css');
+    expect(await stylesheet.text()).toMatch(/h1:where\(\[data-mmd-s-.*12, 34, 56/);
+  }, 30_000);
+
   it('disposes initialized application services when the native listener cannot start', async () => {
     const root = await project();
     const marker = join(root, 'disposed.txt');
