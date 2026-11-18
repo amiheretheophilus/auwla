@@ -97,7 +97,10 @@ async function hydrate(component: Component, serverData: Record<string, () => Re
     requests.push(path);
     return new Promise<Response>(resolve => waiting.set(path, resolve));
   });
-  mounted = mount('root', component);
+  // A mismatch would mount the page again from nothing, which is not what these cases test.
+  const mismatches: unknown[] = [];
+  mounted = mount('root', component as never, { onHydrateError: (error) => { mismatches.push(error); } });
+  expect(mismatches).toEqual([]);
   const reply = async (path: string, response: Response) => {
     await waitFor(() => expect(waiting.has(path), `no client request for ${path}; saw ${requests.join(', ')}`).toBe(true));
     waiting.get(path)!(response);

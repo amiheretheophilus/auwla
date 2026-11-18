@@ -45,6 +45,9 @@ export function planMutations(bindings: readonly BindingNode[]): readonly Mutati
     const module = binding.binding.module;
     for (const { site } of binding.writes) {
       if (site.kind === 'assign' || site.kind === 'update') continue;
+      // A framework call (`mount('root', App)`, a route link's `buildRoutePath(path, { id })`)
+      // never edits the values it receives, whichever state they come from.
+      if (site.kind === 'argument' && is.CallExpression(site.node) && frameworkCall(module, site.node)) continue;
       let member: Node = site.reference.node;
       for (const parent of module.ancestors(member)) {
         if (parent === site.node) break;
@@ -224,7 +227,7 @@ export function planImportedMutations(
 
   for (const mutation of planned) {
     // A framework call (`mount('root', App)`) never edits the values it receives.
-    if (is.CallExpression(mutation.operation) && frameworkCall(entry, mutation.operation)) {
+    if (is.CallExpression(mutation.operation) && frameworkCall(entry.module, mutation.operation)) {
       continue;
     }
 
@@ -242,8 +245,8 @@ export function planImportedMutations(
   return grouped;
 }
 
-function frameworkCall(entry: ResolvedModule, call: Extract<Node, { type: 'CallExpression' }>): boolean {
-  const binding = is.Identifier(call.callee) ? entry.module.referenceOf(call.callee)?.binding ?? null : null;
+function frameworkCall(module: ResolvedModule['module'], call: Extract<Node, { type: 'CallExpression' }>): boolean {
+  const binding = is.Identifier(call.callee) ? module.referenceOf(call.callee)?.binding ?? null : null;
   return binding !== null && frameworkPackage(binding) !== null;
 }
 

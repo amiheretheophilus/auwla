@@ -101,6 +101,84 @@ it("takes a branch the server built after its data settled, and what follows it"
   expect(host.textContent).toBe('Ada12after 2+');
 });
 
+// A root whose content starts with a value slot opens with that slot's anchors, before the first
+// numbered node. Before 2026-11-18 such a root was taken for the old compiler's HTML and mounted
+// again from nothing, so a request that failed on the server was made again and showed pending.
+it('takes a root that starts with a Group, and keeps the error a server request ended in', async () => {
+  const { App } = await load('group-error', `
+    import { $fetch, Group } from '@memoized-dom/data';
+    function Loading() { return <p class="loading">Loading</p>; }
+    function Failed({ retry }) { return <p class="failed">failed<button onClick={retry}>Retry</button></p>; }
+    export function App() {
+      const user = $fetch('/api/broken');
+      return <Group pending={Loading} error={Failed}><h1>{user.name}</h1></Group>;
+    }`);
+  const fetch = (() => Promise.resolve(new Response(JSON.stringify({ message: 'down' }), {
+    status: 500, headers: { 'content-type': 'application/json' },
+  }))) as unknown as typeof globalThis.fetch;
+  const result = await render(App as never, { mode: 'resolve', fetch, markers: true });
+  const host = document.createElement('div');
+  host.id = 'root';
+  host.innerHTML = result.html;
+  document.body.append(host);
+  const script = document.createElement('div');
+  script.innerHTML = result.scriptTag;
+  document.body.append(script.firstElementChild!);
+  const before = host.querySelector('.failed');
+  expect(before).not.toBeNull();
+
+  const requests: string[] = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = ((input: RequestInfo | URL) => {
+    requests.push(String(input));
+    return new Promise<Response>(() => {});
+  }) as typeof globalThis.fetch;
+  const errors: unknown[] = [];
+  setScheduler((run) => run());
+  mounted = mount('root', App as never, { onHydrateError: (error) => { errors.push(error); } });
+  await Promise.resolve();
+  globalThis.fetch = original;
+  expect(errors).toEqual([]);
+  expect(requests).toEqual([]);
+  expect(host.querySelector('.failed') === before).toBe(true);
+  expect(host.querySelector('.loading')).toBeNull();
+});
+
+// The button reads a source in its handler, so it is a value in the section's text slot. Once the
+// button is pooled, that slot's opening comment is left before `<ul>`. Before 2026-11-18 the
+// section was refused for it and the root mounted again from nothing.
+it("takes an element that follows a value slot's opening comment", async () => {
+  const { App } = await load('slot-comment', `
+    import { $fetch, $track } from '@memoized-dom/data';
+    export function App() {
+      const items = $fetch('/api/items');
+      return <section>
+        <button onClick={() => $track(items).refresh()}>refresh</button>
+        <ul>{items.map((item) => <li key={item.id}>{item.label}</li>)}</ul>
+      </section>;
+    }`);
+  const fetch = (() => Promise.resolve(new Response(JSON.stringify([{ id: 1, label: 'one' }]), {
+    headers: { 'content-type': 'application/json' },
+  }))) as unknown as typeof globalThis.fetch;
+  const result = await render(App as never, { mode: 'resolve', fetch, markers: true });
+  const host = document.createElement('div');
+  host.id = 'root';
+  host.innerHTML = result.html;
+  document.body.append(host);
+  const script = document.createElement('div');
+  script.innerHTML = result.scriptTag;
+  document.body.append(script.firstElementChild!);
+  const selectors = ['section', 'button', 'ul', 'li'];
+  const before = selectors.map((selector) => host.querySelector(selector));
+
+  const errors: unknown[] = [];
+  setScheduler((run) => run());
+  mounted = mount('root', App as never, { onHydrateError: (error) => { errors.push(error); } });
+  expect(errors).toEqual([]);
+  selectors.forEach((selector, index) => expect(host.querySelector(selector) === before[index]).toBe(true));
+  expect(host.textContent).toBe('refreshone');
+});
+
 it('reports server nodes it could not use, and nothing for a page that agrees', async () => {
   const { App } = await load('report', `
     export function App() {

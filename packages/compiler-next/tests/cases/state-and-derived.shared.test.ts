@@ -51,6 +51,39 @@ behaves('shared: a module function editing objects it reached through Object.val
   check: show(['0', '2', '4']),
 });
 
+behaves('shared: a module function editing objects in a for...of over Object.values notifies readers', {
+  modules: {
+    './store.ts': `export const counters = { a: { n: 0 }, b: { n: 0 } };
+      export function bumpAll() { for (const c of Object.values(counters)) c.n++; }`,
+  },
+  source: `import { counters, bumpAll } from './store';
+    export function App() { return <main><p>{counters.a.n + counters.b.n}</p>
+      <button onClick={() => bumpAll()}>bump</button></main>; }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check: show(['0', '2', '4']),
+});
+
+behaves('shared: a module function editing objects it listed in an array literal notifies readers', {
+  modules: {
+    './store.ts': `export const counters = { a: { n: 0 }, b: { n: 0 } };
+      export function bumpAll() { [counters.a, counters.b].forEach((c) => c.n++); }`,
+  },
+  source: `import { counters, bumpAll } from './store';
+    export function App() { return <main><p>{counters.a.n + counters.b.n}</p>
+      <button onClick={() => bumpAll()}>bump</button></main>; }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check: show(['0', '2', '4']),
+});
+
+behaves('a handler editing objects it listed in an array literal updates the page', {
+  source: `export function App() {
+      const counters = { a: { n: 0 }, b: { n: 0 } };
+      return <main><p>{counters.a.n + counters.b.n}</p>
+        <button onClick={() => { for (const c of [counters.a, counters.b]) c.n++; }}>bump</button></main>; }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check: show(['0', '2', '4']),
+});
+
 behaves('shared: private fields and super stores notify receiver readers', {
   source: `class Base {
     #count = 1;

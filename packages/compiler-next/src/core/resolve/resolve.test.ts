@@ -53,6 +53,22 @@ describe('write sites', () => {
     ]);
   });
 
+  it('a literal holding the value hands it to the call it is given to or called on', () => {
+    const source = `
+      let user = { a: { n: 0 }, list: [] };
+      save([user.a]);
+      save({ first: user.a, rest: [...user.list] });
+      [user.a].forEach((c) => c.n++);
+      const known = [user.a].includes(target);
+      const kept = [user.a];`;
+    expect(writesOf(source, 'user')).toEqual([
+      { kind: 'argument', path: ['a'], timing: 'body' },
+      { kind: 'argument', path: ['a'], timing: 'body' },
+      { kind: 'argument', path: ['list'], timing: 'body' },
+      { kind: 'argument', path: ['a'], timing: 'body' },
+    ]);
+  });
+
   it('reads are not writes', () => {
     expect(writesOf('let items = [1]; const n = items.length + items[0];', 'items')).toEqual([]);
   });

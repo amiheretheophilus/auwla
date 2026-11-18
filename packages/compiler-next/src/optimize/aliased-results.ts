@@ -45,9 +45,9 @@ function outerUse(module: Module, node: Node): { child: Node; parent: Node | nul
  * (`Object.values(x)[0].n = 1`), that whole use is what the observation wraps, so the edit
  * happens before it finishes. This returns that use, or null when the result is only read.
  *
- * Not covered: `for (const c of Object.values(counters)) c.n++`, whose edits are in a loop body
- * rather than one expression, and `[counters.a].forEach(…)`, whose array names no call at all
- * (`wiki/compiler/handlers.md`, "Edits through a call's result").
+ * `for (const c of Object.values(counters)) c.n++` needs none of this, since its `c` is an alias,
+ * and `[counters.a].forEach(…)` is a literal handed to a call (`core/resolve/writes.ts`,
+ * `literalHolder`; `wiki/compiler/handlers.md`, "Edits through a literal").
  */
 export function editedUseOfResult(module: Module, call: Call): Node | null {
   if (!returnsArgumentValues(module, call)) return null;

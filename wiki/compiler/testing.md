@@ -352,18 +352,23 @@ checks before retention checks as well as in isolation when changing this fixtur
    - the dev error overlay after a broken server import, and recovery after a server-only throw
      (`dev-recovery-browser`); hydrated facade sources (`fullstack-browser`); lazy route navigation
      with `Group`, refs and effects (`lazy-route-browser`).
-   - a request that failed on the server does not hydrate as `Group`'s error UI: the client asks
-     again and shows the pending UI (`examples/stress-lab/ssr.test.ts`, "D"). The server sends the
-     error snapshot (`status: 'error'`), but its message is "Request failed" where the page shows the
-     response's own `message`; no mismatch warning is printed.
+   - a request that failed on the server hydrates as `Group`'s error UI (fixed 2026-11-18, adoption,
+     `delivery.md`), but the payload's error says "Request failed" (errors are redacted on the wire)
+     where the server's HTML shows the response's own `message`, so the text changes as the page
+     hydrates. Whether the server should render the redacted message, or the wire carry the real one,
+     is the user's decision.
 
    **The examples on compiler-next** (2026-11-18, step 5). `examples/stress-lab`'s own tests compile
    with compiler-next: 164 of 175 pass. They found three bugs, fixed with cases: edits through
    `Object.values(…)`'s result (`handlers.md`), `refresh()` of a `$read` whose promise a `const`
    names (`sources.md`, "Refreshing a promise"), and the resource from `runtime.$fetch` (found by the
    size audit, `sources.md`). One expectation follows the 2026-10-20 rule (an untouched local copy of
-   a prop follows a new version). Ten need `lodash-es`, `immer` and `zustand`, which are not
-   installed; one is the server error above.
+   a prop follows a new version). With its locked packages installed (`bun install` in the example,
+   2026-11-18), 171 of 175 pass. The SSR cases now assert that hydration reports no mismatch, which
+   found two adoption bugs (`delivery.md`, "Adopting existing nodes"), and the array-literal edit
+   found one more (`handlers.md`, "Edits through a literal"). The four left read a `zustand` store's
+   state, which lives in the package's closure: uncompiled package state is not an input
+   (`../decisions.md`, 2026-10-21), and the case bridging it with `subscribe` passes.
 
    **The old compiler's tests deleted** (2026-11-17, step 4). First, its programs were recorded
    once more from the root suite (`MEMO_DOM_CORPUS`, 2,967 tests passing on it): 1,679 programs,

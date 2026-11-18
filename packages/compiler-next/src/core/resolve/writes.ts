@@ -10,6 +10,7 @@
 import type { Binding, Module, Reference } from 'yuku-analyzer';
 import { is } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
+import { callOnlyReads } from '../../optimize/effects';
 import { snapshotCalls } from './ambient';
 
 export type WriteKind =
@@ -114,6 +115,20 @@ function writeAt(module: Module, reference: Reference, binding: Binding): WriteS
     }
   }
 
+  // `f([x.a])`, `[x.a, x.b].forEach((c) => c.n++)`: a literal holding the value hands it on as
+  // the value itself would be, so the call it is given to may change it.
+  const holder = literalHolder(module, chain);
+  if (holder !== null) {
+    chain = holder.literal;
+    parent = holder.parent;
+    const receiverCall = receiverCallOf(module, chain);
+    if (receiverCall !== null) {
+      // `[a, b].includes(x)` only reads, as `items.includes(x)` does.
+      if (callOnlyReads(module, receiverCall)) return undefined;
+      return { kind: 'argument', binding, reference, path, node: receiverCall, ...timing(receiverCall) };
+    }
+  }
+
   const isArgument = (is.CallExpression(parent) || is.NewExpression(parent))
     && parent.arguments.some((argument) => unwrapped(argument) === chain);
   // `$snapshot(x)` takes `x`'s value and changes nothing (`features/state/snapshot.ts`).
@@ -124,6 +139,46 @@ function writeAt(module: Module, reference: Reference, binding: Binding): WriteS
     return { kind: 'argument', binding, reference, path, node: parent!, ...timing(parent!) };
   }
   return undefined;
+}
+
+/**
+ * The outermost array or object literal that holds `node` as an element, a property's value or
+ * a spread, with that literal's parent. Null when `node` is not inside one.
+ */
+function literalHolder(module: Module, node: Node): { literal: Node; parent: Node | null } | null {
+  let child = node;
+  let parent = outerParent(module, node);
+  let literal: Node | null = null;
+  for (;;) {
+    if (is.SpreadElement(parent) && unwrapped(parent.argument) === child) {
+      child = parent;
+      parent = outerParent(module, parent);
+      continue;
+    }
+    if (is.ArrayExpression(parent) && parent.elements.includes(child as never)) {
+      literal = parent;
+    } else if (is.ObjectExpression(parent) && parent.properties.includes(child as never)) {
+      literal = parent;
+    } else if (is.Property(parent) && unwrapped(parent.value) === child) {
+      // A property's value: its object literal is the next step.
+      child = parent;
+      parent = outerParent(module, parent);
+      continue;
+    } else {
+      break;
+    }
+    child = literal;
+    parent = outerParent(module, literal);
+  }
+  return literal === null ? null : { literal, parent };
+}
+
+/** `[a, b].forEach(cb)`: the call whose receiver is `literal`, or null. */
+function receiverCallOf(module: Module, literal: Node): Extract<Node, { type: 'CallExpression' }> | null {
+  const member = outerParent(module, literal);
+  if (!is.MemberExpression(member) || unwrapped(member.object) !== literal) return null;
+  const call = outerParent(module, member);
+  return is.CallExpression(call) && unwrapped(call.callee) === member ? call : null;
 }
 
 // ---------------------------------------------------------------------------

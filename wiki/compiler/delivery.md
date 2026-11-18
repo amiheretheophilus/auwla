@@ -196,10 +196,22 @@ Focus, the window's scroll, each element's scroll and a playing medium's time an
 (`rememberDetachedState`). An iframe inside a region, component or row loads its page again, which
 script cannot prevent; this is a decision for the user (`../open-issues.md`).
 
-`mount` adopts when the root range starts with a number (`hydrate-program.ts`), and otherwise uses the
-old compiler's hydration, which goes with that compiler. compiler-next output meeting the old markers
-without numbers is a mismatch (`cloneTemplate` throws `HydrationMismatchError`), so that hydration's own
-recovery reports it to `onHydrateError` and renders on the client in place of the server's HTML.
+`mount` adopts when the root range holds a numbered node (`carriesCreations`, `hydrate-program.ts`),
+and otherwise uses the old compiler's hydration, which goes with that compiler. compiler-next output
+meeting the old markers without numbers is a mismatch (`cloneTemplate` throws `HydrationMismatchError`),
+so that hydration's own recovery reports it to `onHydrateError` and renders on the client in place of
+the server's HTML. A root whose content starts with a value slot (a `Group`, a list) opens with that
+slot's anchors (`mmd:list`, `mmd:value`), so its first number comes after them. Before 2026-11-18 only
+the first node was looked at, and such a root was mounted again from nothing, asking again for a
+source that had failed on the server (`tests/delivery/adopt.test.ts`, "takes a root that starts with a
+Group").
+
+When a template's element is fitted, comments and texts before an element it expects are dropped
+(`fitTemplate`): once a value slot's creations are pooled, its opening comment is left before the
+next element, and the slot makes its own again. Before 2026-11-18 such an element was refused and
+the whole root mounted again ("takes an element that follows a value slot's opening comment").
+`examples/stress-lab/ssr.test.ts` found both: its cases passed on the remount, because a restored
+success stays in the cache, until they asserted that nothing mismatched.
 
 **Adoption reports where the server built something else**, once, to `onHydrateError` (as a
 `'region'` error): the first server node a creation took and could not use (`misfit`), or else one no

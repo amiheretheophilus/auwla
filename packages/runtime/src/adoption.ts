@@ -248,6 +248,13 @@ function fitTemplate(node: Node, template: TemplateNode, namespace: 'html' | 'sv
   for (let index = 2; index < template.length; index++) {
     const expected = template[index] as TemplateNode;
     if (expected !== null && typeof expected !== 'string') {
+      // A slot's opening comment (`mmd:value`), or a text its value wrote, can sit before the
+      // element once the slot's own creations were pooled. Its slot makes them again.
+      while (child !== null && child.nodeType !== 1) {
+        const next = child.nextSibling;
+        element.removeChild(child);
+        child = next;
+      }
       if (child === null || !fitTemplate(child, expected, inner, extra)) return false;
       child = child.nextSibling;
       continue;
@@ -296,10 +303,18 @@ export function collectCreations(start: Node | null, end: Node | null, pool: Map
   }
 }
 
-/** Whether a root range holds numbered server HTML, which `adoptRoot` can take. */
+/**
+ * Whether a root range holds numbered server HTML, which `adoptRoot` can take. A root whose
+ * content starts with a value slot (a `Group`, a list) opens with that slot's anchors
+ * (`mmd:list`, `mmd:value`), so the first numbered node can come after them. Before 2026-11-18
+ * only the first node was looked at, and such a root was taken for the old compiler's HTML and
+ * mounted again from nothing, asking again for a source that had failed on the server.
+ */
 export function carriesCreations(open: Node): boolean {
-  const first = open.nextSibling;
-  return first !== null && first.nodeType === 8 && /^\[\d/.test((first as Comment).data);
+  for (let node = open.nextSibling; node !== null; node = node.nextSibling) {
+    if (node.nodeType === 8 && /^\[\d/.test((node as Comment).data)) return true;
+  }
+  return false;
 }
 
 /**

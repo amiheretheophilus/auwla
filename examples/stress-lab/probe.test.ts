@@ -4,8 +4,9 @@
  *   bun test --preload ./test-support/dom.ts ./examples/stress-lab/probe.test.ts
  *
  * This is an exploratory probe, outside the test root. Remaining failures are
- * shapes rejected by design (JSX built in loops; see
- * docs/dynamic-rendering-options.md). Fixed findings are pinned by tests named
+ * shapes rejected by design: a zustand store's state lives in the package's
+ * closure, and uncompiled package state is not an input (wiki/decisions.md,
+ * 2026-10-21; the `subscribe` bridge case passes). Fixed findings are pinned by tests named
  * after them: stress-lab-regressions, recursive-components, recursive-helpers,
  * indirect-module-writes, namespace-and-getter-reads and snapshot-intrinsic.
  */

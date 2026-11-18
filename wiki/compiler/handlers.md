@@ -463,11 +463,23 @@ member of it written or called (`Object.values(x)[0].n = 1`). Any other use stil
 reuse over `Array.from(items, row)` is unchanged. The case is `shared: a module function editing
 objects it reached through Object.values notifies readers`.
 
-Known gaps, which the reference misses too:
+`for (const c of Object.values(counters)) c.n++` needs none of this: the loop's `c` is an alias
+(above), so its edit reports through the alias index.
 
-- `for (const c of Object.values(counters)) c.n++`: the edits are in a loop body, not one expression.
-- `[counters.a, counters.b].forEach((c) => c.n++)`: the array literal names `counters.a` as a plain
-  read, and nothing marks the later edit through it.
+### Edits through a literal
+
+A literal that holds a value hands it on as the value itself would be (`core/resolve/writes.ts`,
+`literalHolder`): `save([user.a])`, `save({ first: user.a, rest: [...user.list] })` and
+`[counters.a, counters.b].forEach((c) => c.n++)` are `argument` sites of the call the literal is
+given to or called on, as `save(user.a)` is. A known method that only reads (`[a, b].includes(x)`,
+`callOnlyReads`) is not a site, and neither is a literal kept in a name (`const pair = [user.a]`),
+whose name is an alias. Before 2026-11-18 the `forEach` edit inside a module function changed
+`counters`' objects and nothing showed it; the reference already did (cases `shared: a module
+function editing objects it listed in an array literal notifies readers`, and its for…of
+counterpart in a handler).
+
+A framework call never edits what it is given (`frameworkCall`, `plan.ts`), now for any state,
+not only imported values: a route link's `buildRoutePath(path, { id: props.id })` is not observed.
 
 ## Inputs and outputs
 
