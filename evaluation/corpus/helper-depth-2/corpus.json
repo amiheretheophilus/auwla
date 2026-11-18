@@ -1,8 +1,0 @@
-{
-  "name": "helper-depth-2",
-  "description": "Two helper calls propagate a parameter-relative write.",
-  "category": "helper depth 2",
-  "expect": "accept",
-  "manualAdaptations": [],
-  "unsupportedConstructs": []
-}

@@ -416,7 +416,12 @@ array child). Remove each check when its phase is built.
      and server-pages use JavaScript conditionals; stress-lab's tests run on compiler-next
      (`testing.md`, "The examples on compiler-next").
   6. [ ] `packages/compiler` is deleted, with the runtime, server and data code only its output
-     reached.
+     reached. Done first (2026-11-18): the package and `evaluation/` (a study of the old linker,
+     whose `vendor/` copy was never in the repository) are gone; its JSX type tests moved to
+     compiler-next (`tests/jsx-types`, `tsconfig.jsx.json`, `bun run typecheck:jsx`); what named the
+     package now names `@memoized-dom/compiler-next`, and `paths` map `@memoized-dom/compiler/jsx` to
+     its `src/jsx-types.ts`. The bench baselines still take the old compiler from `d6e678b`. Left:
+     the runtime, server and data code only the old output reached.
   7. [ ] compiler-next is renamed `packages/compiler` (`@memoized-dom/compiler`); `docs/` follows.
 
 ## Later

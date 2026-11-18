@@ -5,10 +5,10 @@
     "moduleResolution": "Bundler",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "jsx": "preserve",
-    "jsxImportSource": "@memoized-dom/compiler",
+    "jsxImportSource": "@memoized-dom/compiler-next",
     "strict": true,
     "noEmit": true,
-    "types": ["@memoized-dom/compiler/jsx"],
+    "types": ["@memoized-dom/compiler-next/jsx"],
     "paths": {
       "#server/*": ["./server/*"],
       "#server-functions": ["./.memoized/server-functions.d.ts"]

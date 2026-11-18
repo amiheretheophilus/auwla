@@ -9,6 +9,5 @@
       "@memoized-dom/compiler/jsx-runtime": ["./src/jsx-runtime.ts"]
     }
   },
-  "include": ["src/jsx-types.ts", "src/jsx-runtime.ts", "src/jsx/dom-types.ts", "tests"],
-  "exclude": ["dist"]
+  "include": ["src/jsx-types.ts", "src/jsx-runtime.ts", "src/jsx/dom-types.ts", "tests/jsx-types"]
 }

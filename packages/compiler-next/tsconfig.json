@@ -5,5 +5,5 @@
     "noEmit": true
   },
   "include": ["src", "tests"],
-  "exclude": ["tests/out"]
+  "exclude": ["tests/out", "tests/jsx-types"]
 }

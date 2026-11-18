@@ -1,8 +1,0 @@
-{
-  "name": "permissions-form",
-  "description": "Nested permission records updated through reusable parameter-relative helpers.",
-  "category": "application case study",
-  "expect": "accept",
-  "manualAdaptations": [],
-  "unsupportedConstructs": []
-}

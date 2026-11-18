@@ -119,7 +119,7 @@ const RUNTIME_EXPORTS = [
 
 /**
  * `$fetch`, `$read`, `$track` and `$forms` are ambient framework globals whose
- * imports the compiler supplies (`packages/compiler/src/jsx-types.ts`). A module
+ * imports the compiler supplies (`src/jsx-types.ts`). A module
  * reading one without a binding behaves as if it imported it.
  */
 function withAmbientDataImports(source: string, path: string): string {

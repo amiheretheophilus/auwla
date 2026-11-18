@@ -11,7 +11,7 @@
  *
  * It follows the syntax, not the program: values flow through bindings, destructuring, props,
  * member reads, `.map` and other array callbacks, local helpers and imported components. No
- * application code runs. Ported from the old compiler's `packages/compiler/src/page-projection.ts`.
+ * application code runs. Ported from the old compiler's `page-projection.ts` (last at `d6e678b`).
  */
 import { is } from 'yuku-ast';
 import type { Node } from 'yuku-parser';

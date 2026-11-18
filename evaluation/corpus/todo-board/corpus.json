@@ -1,8 +1,0 @@
-{
-  "name": "todo-board",
-  "description": "A multi-module task board with collection mutations, filters, and derived counts.",
-  "category": "application case study",
-  "expect": "accept",
-  "manualAdaptations": [],
-  "unsupportedConstructs": []
-}

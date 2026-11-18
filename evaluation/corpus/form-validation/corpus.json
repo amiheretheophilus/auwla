@@ -1,8 +1,0 @@
-{
-  "name": "form-validation",
-  "description": "Form fields passed through parameter-relative validation helpers.",
-  "category": "parameter effects",
-  "expect": "accept",
-  "manualAdaptations": [],
-  "unsupportedConstructs": []
-}

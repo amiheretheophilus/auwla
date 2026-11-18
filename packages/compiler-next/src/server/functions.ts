@@ -5,8 +5,8 @@
  * Each export is `define.function({ get|post|put|patch|delete: async (context, ...args) => … })`.
  * The analysis reads the endpoint, its HTTP method and its transported parameters from the
  * module's syntax alone; the facade is what client code imports from `#server-functions`, the same
- * names calling `$fetch` instead of running the body. Ported from the old compiler
- * (`packages/compiler/src/server-functions.ts`), whose output the tests compare against.
+ * names calling `$fetch` instead of running the body. Ported from the old compiler's
+ * `server-functions.ts` (deleted 2026-11-18; last at `d6e678b`).
  */
 import { is } from 'yuku-ast';
 import { parse } from 'yuku-parser';

@@ -2,7 +2,7 @@
  * Ambient framework data calls.
  *
  * The framework declares `$fetch`, `$read`, `$track` and `$forms` as globals
- * (`packages/compiler/src/jsx-types.ts`) and the compiler supplies their
+ * (`src/jsx-types.ts`) and the compiler supplies their
  * imports, so authored modules may call them without importing them. A module
  * that does gets the import appended to its text before analysis. Every later
  * stage then resolves the call by binding identity, exactly as for an explicit

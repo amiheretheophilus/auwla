@@ -3,8 +3,8 @@
  * always round-trip: `<p><div></div></p>` closes the paragraph, and `<table><tr>` gains a `tbody`.
  * A page that would change shape keeps its program, so authored markup never silently restructures.
  *
- * The old compiler refuses every `table`, `select`, `pre` and `svg`, whatever is in them
- * (`packages/compiler/src/dom/html-shape.ts`). This checks what each one actually contains.
+ * The old compiler refused every `table`, `select`, `pre` and `svg`, whatever was in them
+ * (its `dom/html-shape.ts`, last at `d6e678b`). This checks what each one actually contains.
  */
 const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'param', 'source', 'track', 'wbr']);
 

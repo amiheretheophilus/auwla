@@ -4,9 +4,8 @@ import type { SourceLanguage } from './core/parse/languages';
  * Options of `compileModules`. One read-only object, passed to every stage that
  * needs it (`wiki/compiler/README.md`, rule 2).
  *
- * The old compiler's options (`packages/compiler/src/linking/model.ts`) arrive
- * with the phase that needs each one (`wiki/compiler/plan.md`). Unknown options
- * are ignored, so callers can switch compilers without changes.
+ * The old compiler's options arrived with the phase that needed each one
+ * (`wiki/compiler/plan.md`). Unknown options are ignored.
  */
 export interface CompileModulesOptions {
   /** Disable optional plan fast paths to retain the general implementation. */

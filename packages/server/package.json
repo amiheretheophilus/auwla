@@ -41,7 +41,6 @@
     "linkedom": "^0.18.0"
   },
   "devDependencies": {
-    "@memoized-dom/compiler": "workspace:*",
     "@types/bun": "latest"
   },
   "publishConfig": {

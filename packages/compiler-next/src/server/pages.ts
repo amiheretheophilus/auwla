@@ -18,7 +18,7 @@
  * The handler stays backend code; the page module is UI, compiled like any component in both
  * builds. What the browser gets (nothing, or the page's component and the inputs it reads) is the
  * contract, which the application decides (`page-inputs.ts`). Ported from the old compiler's
- * `packages/compiler/src/server-pages.ts`, with its errors.
+ * `server-pages.ts` (last at `d6e678b`), with its errors.
  */
 import { is, walk } from 'yuku-ast';
 import { parse } from 'yuku-parser';
