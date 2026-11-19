@@ -25,9 +25,9 @@
     display: grid;
     place-items: center;
     align-self: stretch;
-    border: 1px solid var(--desk-rule);
+    border: 1px solid #d6cbbd;
     border-right: 0;
-    border-radius: 2px 0 0 2px;
+    border-radius: .75rem 0 0 .75rem;
     background: var(--desk-surface);
     color: var(--desk-muted);
     font-family: var(--desk-mono);
@@ -35,7 +35,7 @@
   }
 
   .target input {
-    border-radius: 0 2px 2px 0;
+    border-radius: 0 .75rem .75rem 0;
   }
 
   .remove {

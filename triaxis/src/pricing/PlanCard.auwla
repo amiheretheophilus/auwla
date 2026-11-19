@@ -1,0 +1,264 @@
+import { axes, markets } from '../desk/draft/model/signal-fields';
+import type { Plan } from '../members/plans';
+
+<style>
+  .plan {
+    --plan-ink: #27211d;
+    --plan-muted: #625850;
+    --plan-rule: #e3d9cc;
+    --plan-surface: #fffdf9;
+
+    position: relative;
+    display: grid;
+    grid-template-rows: auto auto auto 1fr auto;
+    gap: 1.4rem;
+    height: 100%;
+    box-sizing: border-box;
+    padding: clamp(1.5rem, 3vw, 2.25rem);
+    border: 1px solid var(--plan-rule);
+    border-radius: 1.25rem;
+    background: var(--plan-surface);
+    color: var(--plan-ink);
+    box-shadow: 0 1px 2px #27211d0a, 0 1.5rem 3rem -2.5rem #27211d40;
+    transition: translate .5s cubic-bezier(.16, 1, .3, 1), box-shadow .5s cubic-bezier(.16, 1, .3, 1), border-color .25s ease;
+  }
+
+  .plan:hover {
+    translate: 0 -.25rem;
+    box-shadow: 0 1px 2px #27211d0a, 0 2rem 3.5rem -2.25rem #27211d59;
+  }
+
+  /* All three axes is the featured plan: the dark of the score card. */
+  .plan[data-featured="true"] {
+    --plan-ink: #f3ede4;
+    --plan-muted: #f3ede4a6;
+    --plan-rule: #f3ede41f;
+    --plan-surface: #15110f;
+
+    border-color: #15110f;
+    background:
+      radial-gradient(120% 80% at 100% 0%, #a8271c33, #0000 55%),
+      var(--plan-surface);
+  }
+
+  /* Picked on the subscribe page. */
+  .plan[data-selected="true"] {
+    border-color: var(--plan-ink);
+    box-shadow: inset 0 0 0 1px var(--plan-ink), 0 2rem 3.5rem -2.25rem #27211d59;
+  }
+
+  .plan[data-featured="true"][data-selected="true"] {
+    border-color: #e4614f;
+    box-shadow: inset 0 0 0 1px #e4614f, 0 2rem 3.5rem -2.25rem #27211d80;
+  }
+
+  .head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .name {
+    margin: 0;
+    font-size: .95rem;
+    font-weight: 600;
+    letter-spacing: -.01em;
+  }
+
+  .badge {
+    padding: .35rem .7rem;
+    border-radius: 999px;
+    background: #a8271c;
+    color: #fff9f0;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+  }
+
+  .price {
+    display: flex;
+    align-items: baseline;
+    gap: .4rem;
+    margin: 0;
+  }
+
+  .price strong {
+    font-size: clamp(3.2rem, 6vw, 4.25rem);
+    font-weight: 400;
+    line-height: .9;
+    letter-spacing: -.06em;
+  }
+
+  .price span {
+    color: var(--plan-muted);
+    font-size: .95rem;
+  }
+
+  .per-month {
+    margin: -.75rem 0 0;
+    color: var(--plan-muted);
+    font-size: .85rem;
+  }
+
+  /* The axes the plan opens: all three ticked, or one to choose. */
+  .axes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .45rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .axis {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .4rem .75rem;
+    border: 1px solid var(--plan-rule);
+    border-radius: 999px;
+    font-size: .8rem;
+  }
+
+  .axis::before {
+    width: .5rem;
+    height: .5rem;
+    border-radius: 50%;
+    background: var(--axis-color);
+    content: "";
+  }
+
+  /* A single-axis plan offers the three as options, so they are drawn as choices. */
+  .plan[data-featured="false"] .axis {
+    border-style: dashed;
+  }
+
+  .axis[data-axis="forex"] { --axis-color: #3987e5; }
+  .axis[data-axis="crypto"] { --axis-color: #9085e9; }
+  .axis[data-axis="synthetics"] { --axis-color: #eda100; }
+
+  .axes-note {
+    margin: -.85rem 0 0;
+    color: var(--plan-muted);
+    font-size: .78rem;
+  }
+
+  .features {
+    display: grid;
+    align-content: start;
+    gap: .7rem;
+    margin: 0;
+    padding: 1.4rem 0 0;
+    border-top: 1px solid var(--plan-rule);
+    list-style: none;
+    font-size: .9rem;
+    line-height: 1.45;
+  }
+
+  .features li {
+    display: grid;
+    grid-template-columns: 1.15rem 1fr;
+    gap: .65rem;
+  }
+
+  .features li::before {
+    display: grid;
+    place-items: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    margin-top: .1rem;
+    border-radius: 50%;
+    background: #2f9e64;
+    color: #fff;
+    font-size: .62rem;
+    font-weight: 800;
+    content: "✓";
+  }
+
+  .action {
+    display: grid;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .plan,
+    .plan:hover {
+      translate: none;
+      transition: none;
+    }
+  }
+</style>
+
+/** "About $33.33 a month", for a plan longer than a month. */
+function monthlyNote(plan: Plan): string {
+  if (plan.months <= 1 || plan.price === null) {
+    return '';
+  }
+  return `About $${(plan.price / plan.months).toFixed(2)} a month`;
+}
+
+function priceUnit(plan: Plan): string {
+  if (plan.months === 1) {
+    return '/ month';
+  }
+  return `/ ${plan.months} months`;
+}
+
+interface PlanCardProps {
+  plan: Plan;
+  /** Shown highlighted on the subscribe page. */
+  selected?: boolean;
+}
+
+/**
+ * One plan as a pricing card. The call to action goes in the `action` slot: a link on the public
+ * pages, a choose button on the subscribe page. Only facts true today are listed.
+ */
+export function PlanCard({ plan, selected = false }: PlanCardProps) {
+  const featured = plan.scope === 'all';
+
+  let name = 'One axis';
+  if (featured) {
+    name = 'All three axes';
+  }
+
+  return (
+    <article class="plan" data-featured={String(featured)} data-selected={String(selected)} aria-label={name}>
+      <div class="head">
+        <h3 class="name">name</h3>
+        if (featured) {
+          <span class="badge">"Full coverage"</span>
+        }
+      </div>
+
+      <p class="price"><strong>"$" + plan.price</strong> <span>priceUnit(plan)</span></p>
+      if (monthlyNote(plan)) {
+        <p class="per-month">monthlyNote(plan)</p>
+      }
+
+      <div>
+        <ul class="axes" aria-label="Axes included">
+          for (const axis of axes) {
+            <li key={axis} class="axis" data-axis={axis}>markets[axis].label</li>
+          }
+        </ul>
+      </div>
+      if (!featured) {
+        <p class="axes-note">"You choose one of the three at checkout."</p>
+      }
+
+      <ul class="features">
+        if (featured) {
+          <li>"Forex, crypto and synthetics signals, as they are posted"</li>
+        } else {
+          <li>"Signals for the axis you choose, as they are posted"</li>
+        }
+        <li>"Entry, stop and every target on a branded score card"</li>
+        <li>"Copy the levels in one tap"</li>
+        <li>"Every signal passes its price checks before it is posted"</li>
+      </ul>
+
+      <div class="action"><slot name="action" /></div>
+    </article>
+  );
+}

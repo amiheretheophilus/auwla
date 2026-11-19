@@ -43,6 +43,7 @@ app.ssr('/desk', App, { delivery: 'buffer' });
 app.ssr('/desk/sign-in', App, { delivery: 'buffer' });
 app.ssr('/desk/analyses/:id', App, { delivery: 'buffer' });
 app.ssr('/desk/payments', App, { delivery: 'buffer' });
+app.ssr('/pricing', App, { delivery: 'buffer' });
 app.ssr('/sign-in', App, { delivery: 'buffer' });
 app.ssr('/sign-up', App, { delivery: 'buffer' });
 app.ssr('/app', App, { delivery: 'buffer' });

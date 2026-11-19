@@ -1,6 +1,7 @@
 import { claimPayment } from '#server-functions';
 import { formatDay, paymentStatusLabels, type AxisAccess, type PaymentSummary } from '../membership';
 import { axisLabel, findPlan, monthsText, paymentMethodLabel, planLength, planTitle, type Plan } from '../plans';
+import { PlanCard } from '../../pricing/PlanCard.auwla';
 
 <style>
   .title {
@@ -47,20 +48,23 @@ import { axisLabel, findPlan, monthsText, paymentMethodLabel, planLength, planTi
     display: grid;
     gap: .35rem;
     padding: 1.1rem 1.2rem;
-    border: 1px solid var(--desk-rule);
-    border-radius: 2px;
-    background: var(--desk-input);
+    border: 1px solid #d6cbbd;
+    border-radius: .9rem;
+    background: #fffdf9;
+    box-shadow: 0 1px 2px #27211d0a;
     cursor: pointer;
-    transition: border-color .2s ease, box-shadow .2s ease;
+    transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
   }
 
   .choice:hover {
-    border-color: #b3a697;
+    border-color: #bcae9e;
+    background: #ffffff;
   }
 
   .choice:has(input:checked) {
     border-color: var(--desk-ink);
-    box-shadow: inset 0 0 0 1px var(--desk-ink);
+    background: #ffffff;
+    box-shadow: inset 0 0 0 1px var(--desk-ink), 0 .5rem 1.25rem -.75rem #27211d40;
   }
 
   .choice:has(input:focus-visible) {
@@ -99,6 +103,51 @@ import { axisLabel, findPlan, monthsText, paymentMethodLabel, planLength, planTi
     color: var(--desk-muted);
     font-size: .85rem;
     letter-spacing: 0;
+  }
+
+  /* The plan picker: the pricing cards, each wrapped in a label around a hidden radio. */
+  .plan-picks {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+    gap: 1rem;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .plan-pick {
+    display: block;
+    border-radius: 1.25rem;
+    cursor: pointer;
+  }
+
+  .plan-pick:has(input:focus-visible) {
+    outline: 2px solid var(--desk-ink);
+    outline-offset: 4px;
+  }
+
+  .pick-state {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.9rem;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    font-size: .9rem;
+    font-weight: 500;
+    opacity: .75;
+    transition: opacity .2s ease, background-color .2s ease;
+  }
+
+  .plan-pick:hover .pick-state {
+    opacity: 1;
+  }
+
+  .pick-state[data-picked="true"] {
+    border-color: #a8271c;
+    background: #a8271c;
+    color: #fff9f0;
+    opacity: 1;
   }
 
   .more {
@@ -235,9 +284,19 @@ interface Instruction {
 
 interface SubscribeProps {
   plans: Plan[];
+  /** The plan picked on the pricing page, or ''. */
+  chosen: string;
   access: AxisAccess[];
   instructions: Instruction[];
   payments: PaymentSummary[];
+}
+
+/** The plan to start on: the one picked on the pricing page, or the first on sale. */
+function startingPlan(plans: Plan[], chosen: string): string {
+  if (chosen && plans.some(plan => plan.id === chosen)) {
+    return chosen;
+  }
+  return plans[0]?.id ?? '';
 }
 
 /** "Active until 18 Dec 2026. A new payment adds time on top." for an axis already held. */
@@ -251,8 +310,8 @@ function heldLine(entry: AxisAccess | undefined): string {
   return 'Held until ' + formatDay(entry.expiresAt) + '. Time is added on top.';
 }
 
-export function SubscribePage({ plans, access, instructions, payments }: SubscribeProps) {
-  let planId = plans[0]?.id ?? '';
+export function SubscribePage({ plans, chosen, access, instructions, payments }: SubscribeProps) {
+  let planId = startingPlan(plans, chosen);
   let axis = 'forex';
   let method = instructions[0]?.method ?? 'bank';
   let submitted = false;
@@ -297,14 +356,18 @@ export function SubscribePage({ plans, access, instructions, payments }: Subscri
               <p>"One axis, or all three together."</p>
             </div>
             <div>
-              <fieldset class="choices">
+              <fieldset class="plan-picks">
                 <legend class="visually-hidden">"Plan"</legend>
                 for (const option of plans) {
-                  <label key={option.id} class="choice">
-                    <input type="radio" name="plan" value={option.id} checked={planId === option.id} onChange={() => planId = option.id} />
-                    <strong>planTitle(option)</strong>
-                    <span>planLength(option)</span>
-                    <span class="price">"$" + option.price <small>" USD"</small></span>
+                  <label key={option.id} class="plan-pick">
+                    <input class="visually-hidden" type="radio" name="plan" value={option.id} checked={planId === option.id} onChange={() => planId = option.id} />
+                    <PlanCard plan={option} selected={planId === option.id}>
+                      if (planId === option.id) {
+                        <span slot="action" class="pick-state" data-picked="true">"✓ Selected"</span>
+                      } else {
+                        <span slot="action" class="pick-state" data-picked="false">"Choose this plan"</span>
+                      }
+                    </PlanCard>
                   </label>
                 }
               </fieldset>

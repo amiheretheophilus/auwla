@@ -2,6 +2,8 @@ import { betterAuth } from 'better-auth';
 import { admin } from 'better-auth/plugins/admin';
 import { createAccessControl } from 'better-auth/plugins/access';
 import { adminAc, defaultStatements, userAc } from 'better-auth/plugins/admin/access';
+import { deskDatabase } from '../desk/storage';
+import type { StaffMember, StaffRole } from '../../src/desk/analysis';
 
 // Staff roles for Better Auth's admin plugin. Admins keep the plugin's account management;
 // analysts are staff who work on the desk and manage no accounts.
@@ -11,8 +13,31 @@ const staffRoles = {
   user: access.newRole(userAc.statements),
   analyst: access.newRole({ user: [], session: [] }),
 };
-import { deskDatabase } from '../desk/storage';
-import type { StaffMember, StaffRole } from '../../src/desk/analysis';
+
+/**
+ * The addresses Better Auth accepts requests from. It refuses any other origin, so opening the
+ * local site as http://localhost:3070 while BETTER_AUTH_URL says http://127.0.0.1:3070 broke
+ * sign-up. Locally both names of the machine are trusted; BETTER_AUTH_TRUSTED_ORIGINS adds
+ * more, comma separated, for a deployment reached at several addresses.
+ */
+export function trustedOrigins(baseURL: string): string[] {
+  const base = new URL(baseURL);
+  const origins = new Set([base.origin]);
+  if (base.hostname === '127.0.0.1' || base.hostname === 'localhost') {
+    let port = '';
+    if (base.port) {
+      port = `:${base.port}`;
+    }
+    origins.add(`${base.protocol}//127.0.0.1${port}`);
+    origins.add(`${base.protocol}//localhost${port}`);
+  }
+  for (const origin of (process.env.BETTER_AUTH_TRUSTED_ORIGINS ?? '').split(',')) {
+    if (origin.trim()) {
+      origins.add(origin.trim());
+    }
+  }
+  return [...origins];
+}
 
 function sessionSecret() {
   return process.env.BETTER_AUTH_SECRET?.trim() ?? '';
@@ -30,6 +55,7 @@ function createAuth() {
   return betterAuth({
     appName: 'Triaxis',
     baseURL,
+    trustedOrigins: trustedOrigins(baseURL),
     secret,
     database: deskDatabase(),
     emailAndPassword: {

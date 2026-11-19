@@ -1,0 +1,120 @@
+import { plansOnSale } from '../members/plans';
+import { PlanCard } from '../pricing/PlanCard.auwla';
+import { PlanLink } from '../pricing/PlanLink.auwla';
+
+<style>
+  .plans {
+    padding: clamp(3.5rem, 8vw, 7rem) var(--gutter);
+    background: var(--paper-soft);
+  }
+
+  .intro {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    align-items: start;
+    gap: 1.25rem 0;
+    margin-bottom: clamp(2rem, 4vw, 3.25rem);
+  }
+
+  .kicker {
+    margin: 0;
+    padding-top: .6rem;
+    color: var(--accent);
+    font-size: 1rem;
+    font-weight: 500;
+  }
+
+  .intro h2 {
+    max-width: 16ch;
+    margin: 0;
+    padding-left: clamp(1rem, 3vw, 3rem);
+    font-size: clamp(2rem, 4.6vw, 4.5rem);
+    font-weight: 400;
+    line-height: .98;
+    letter-spacing: -.055em;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 3fr;
+  }
+
+  .note {
+    display: grid;
+    align-content: start;
+    gap: 1rem;
+    margin: 0;
+    padding-right: 2rem;
+    color: var(--muted-ink);
+    font-size: .9rem;
+    line-height: 1.55;
+  }
+
+  .note a {
+    color: var(--ink);
+    font-weight: 500;
+    text-underline-offset: .25em;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+    gap: clamp(1rem, 2.5vw, 1.5rem);
+    margin: 0;
+    padding: 0 0 0 clamp(1rem, 3vw, 3rem);
+    list-style: none;
+  }
+
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .cards li:nth-child(2) {
+        animation-range: entry 15% cover 38%;
+      }
+    }
+  }
+
+  @media (max-width: 55rem) {
+    .intro,
+    .layout {
+      grid-template-columns: 1fr;
+    }
+
+    .intro h2,
+    .cards {
+      padding-left: 0;
+    }
+
+    .note {
+      order: 2;
+      margin-top: 1.5rem;
+      padding-right: 0;
+    }
+  }
+</style>
+
+/** The plans on the public page, so visitors see the prices before they make an account. */
+export function PlansSection() {
+  return (
+    <section class="plans" id="plans" aria-labelledby="plans-heading">
+      <div class="intro">
+        <p class="kicker reveal">"Pricing"</p>
+        <h2 id="plans-heading" class="reveal">"One axis, or all three."</h2>
+      </div>
+      <div class="layout">
+        <p class="note reveal">
+          "Pay by bank transfer, mobile money or USDT. Your signals open as soon as your payment is confirmed."
+          <a href="/pricing">"How paying works →"</a>
+        </p>
+        <ul class="cards" aria-label="Plans">
+          for (const plan of plansOnSale()) {
+            <li key={plan.id} class="reveal">
+              <PlanCard plan={plan}>
+                <PlanLink slot="action" plan={plan} member={false} />
+              </PlanCard>
+            </li>
+          }
+        </ul>
+      </div>
+    </section>
+  );
+}

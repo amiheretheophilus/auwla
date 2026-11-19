@@ -29,6 +29,31 @@ function copyCookies(from: Response, to: Response) {
 /** Who may finish signing in: staff only on the desk, anyone on the member pages. */
 type Audience = 'staff' | 'members';
 
+/**
+ * Better Auth answers 403 when the page's address is not one it trusts (`trustedOrigins` in
+ * auth.ts). That is a setup problem, not a wrong password, so it says so, and the server log
+ * names the address and the setting that fixes it.
+ */
+function originRefused(request: Request) {
+  console.warn(
+    `[triaxis] Better Auth refused a request from ${request.headers.get('origin') ?? 'an unknown origin'}. `
+    + 'Open the site at BETTER_AUTH_URL, or add this address to BETTER_AUTH_TRUSTED_ORIGINS.',
+  );
+  return json({ message: 'Sign-in is not set up for this address of the site. Try the address in the setup guide.' }, {
+    status: 403,
+    headers: privateHeaders,
+  });
+}
+
+/** The JSON Better Auth sent with a successful answer, or null. */
+async function readBody(response: Response): Promise<{ user?: { role?: unknown } } | null> {
+  if (!response.ok) {
+    await response.body?.cancel();
+    return null;
+  }
+  return await response.json().catch(() => null) as { user?: { role?: unknown } } | null;
+}
+
 async function signIn(request: Request, audience: Audience = 'staff') {
   if (!isSameOrigin(request)) {
     return json({ message: 'Sign in from the Triaxis site.' }, { status: 403, headers: privateHeaders });
@@ -41,9 +66,9 @@ async function signIn(request: Request, audience: Audience = 'staff') {
   }
 
   const response = await getAuth().handler(request);
-  const body = response.ok ? await response.json().catch(() => null) as { user?: { role?: unknown } } | null : null;
-  if (!response.ok) {
-    await response.body?.cancel();
+  const body = await readBody(response);
+  if (response.status === 403) {
+    return originRefused(request);
   }
 
   // A member's password opens no desk. The session cookie is withheld, so nothing is signed in.
@@ -121,6 +146,9 @@ export async function registerMember(request: Request, name: string, email: stri
   }));
   await response.body?.cancel();
 
+  if (response.status === 403) {
+    return originRefused(request);
+  }
   if (response.status === 429) {
     return json({ message: 'Too many attempts. Try again shortly.' }, { status: 429, headers: privateHeaders });
   }
@@ -132,6 +160,7 @@ export async function registerMember(request: Request, name: string, email: stri
     return json({ message: 'Check your name, email and password, then try again.' }, { status: 400, headers: privateHeaders });
   }
   if (!response.ok) {
+    console.warn(`[triaxis] Better Auth answered sign-up with ${response.status}.`);
     return json({ message: 'Sign-up is temporarily unavailable.' }, { status: 503, headers: privateHeaders });
   }
 

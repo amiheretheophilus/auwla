@@ -99,49 +99,80 @@
 
   .desk-label {
     display: grid;
-    gap: .45rem;
+    gap: .5rem;
     min-width: 0;
-    color: var(--desk-muted);
-    font-size: .8rem;
+    color: var(--desk-ink);
+    font-size: .82rem;
+    font-weight: 500;
   }
 
-  .desk input,
+  /* Text fields, selects and text areas. Radios and checkboxes keep their native look. */
+  .desk input:not([type="radio"], [type="checkbox"]),
   .desk select,
   .desk textarea {
     box-sizing: border-box;
     width: 100%;
     min-width: 0;
-    padding: .7rem .8rem;
-    border: 1px solid var(--desk-rule);
-    border-radius: 2px;
-    background-color: var(--desk-input);
+    padding: .85rem 1rem;
+    border: 1px solid #d6cbbd;
+    border-radius: .75rem;
+    background-color: #fffdf9;
     color: var(--desk-ink);
     font: inherit;
     font-size: .95rem;
-    transition: border-color .2s ease, box-shadow .2s ease;
+    font-weight: 400;
+    box-shadow: 0 1px 2px #27211d0a, inset 0 1px 0 #ffffff;
+    transition: border-color .2s ease, box-shadow .2s ease, background-color .2s ease;
   }
 
-  .desk input,
+  .desk input:not([type="radio"], [type="checkbox"]),
   .desk select {
-    min-height: 2.9rem;
+    min-height: 3.15rem;
   }
 
   .desk textarea {
+    min-height: 6rem;
+    line-height: 1.5;
     resize: vertical;
   }
 
-  .desk input:hover,
-  .desk select:hover,
-  .desk textarea:hover {
-    border-color: #b3a697;
+  .desk input::placeholder,
+  .desk textarea::placeholder {
+    color: #a89c8e;
   }
 
-  .desk input:focus-visible,
+  .desk input:not([type="radio"], [type="checkbox"]):hover,
+  .desk select:hover,
+  .desk textarea:hover {
+    border-color: #bcae9e;
+    background-color: #ffffff;
+  }
+
+  .desk input:not([type="radio"], [type="checkbox"]):focus-visible,
   .desk select:focus-visible,
   .desk textarea:focus-visible {
     border-color: var(--desk-ink);
     outline: none;
-    box-shadow: 0 0 0 3px #a8271c24;
+    background-color: #ffffff;
+    box-shadow: 0 0 0 4px #a8271c1a, 0 1px 2px #27211d14;
+  }
+
+  /* A field the person has touched and left wrong. Untouched empty fields stay calm. */
+  .desk input:user-invalid,
+  .desk textarea:user-invalid {
+    border-color: var(--desk-accent);
+    box-shadow: 0 0 0 4px #a8271c14;
+  }
+
+  /* Read-only fields: a posted analysis, or one another analyst wrote. */
+  .desk input:disabled:not([type="radio"], [type="checkbox"]),
+  .desk select:disabled,
+  .desk textarea:disabled {
+    border-color: #e2d9cd;
+    background-color: #f5efe6;
+    color: var(--desk-muted);
+    box-shadow: none;
+    cursor: not-allowed;
   }
 
   /* Prices line up in monospaced figures. */
@@ -152,17 +183,54 @@
   }
 
   .desk select {
-    padding-right: 2.4rem;
+    padding-right: 2.6rem;
     appearance: none;
     background-image:
       linear-gradient(45deg, #0000 50%, currentColor 50%),
       linear-gradient(135deg, currentColor 50%, #0000 50%);
     background-position:
-      right 1.1rem center,
-      right .8rem center;
+      right 1.3rem center,
+      right 1rem center;
     background-size: .3rem .3rem;
     background-repeat: no-repeat;
     cursor: pointer;
+  }
+
+  /* A password field with its Show / Hide button inside it (src/auth/PasswordField.auwla). */
+  .desk .password-field {
+    position: relative;
+    display: block;
+  }
+
+  .desk .password-field input {
+    padding-right: 4.6rem;
+  }
+
+  .desk .password-field button {
+    position: absolute;
+    top: 50%;
+    right: .45rem;
+    padding: .4rem .7rem;
+    border: 0;
+    border-radius: .5rem;
+    background: transparent;
+    color: var(--desk-muted);
+    font: inherit;
+    font-size: .78rem;
+    font-weight: 500;
+    cursor: pointer;
+    translate: 0 -50%;
+    transition: background-color .2s ease, color .2s ease;
+  }
+
+  .desk .password-field button:hover {
+    background: #f1ebe1;
+    color: var(--desk-ink);
+  }
+
+  .desk .password-field button:focus-visible {
+    outline: 2px solid var(--desk-ink);
+    outline-offset: 1px;
   }
 
   .desk-button {

@@ -48,7 +48,9 @@ Desk components are grouped under `src/desk/auth`, `src/desk/layout`, `src/desk/
 
 ## Members
 
-Visitors create an account at `/sign-up` and sign in at `/sign-in`. New accounts get the plain `user` role, so they can never open the desk, and the staff sign-in at `/desk/sign-in` refuses them. **Email verification is off while testing** (`requireEmailVerification: false` in `server/auth/auth.ts`); turn it on together with an email sender. Staff can sign in on the member pages too.
+Visitors see the plans before making an account, on `/pricing` and in the landing page's Plans section. Choosing one carries it as `?plan=` through sign-up (or sign-in) straight to checkout, with that plan already picked.
+
+Visitors create an account at `/sign-up` and sign in at `/sign-in`. Better Auth only accepts requests from the addresses it trusts: `BETTER_AUTH_URL`, both `127.0.0.1` and `localhost` on that port when running locally, and any listed in `BETTER_AUTH_TRUSTED_ORIGINS`. A refused address gets a clear message and a server log line naming it. New accounts get the plain `user` role, so they can never open the desk, and the staff sign-in at `/desk/sign-in` refuses them. **Email verification is off while testing** (`requireEmailVerification: false` in `server/auth/auth.ts`); turn it on together with an email sender. Staff can sign in on the member pages too.
 
 `/app/subscribe` sells the plans in `src/members/plans.ts`. Only the two prices the owner has given are on sale: one axis for 1 month ($35) and all three axes for 3 months ($100). The other lengths are listed without a price and stay hidden until the owner sets them. The member picks a plan (and an axis for a single-axis plan), pays by bank, mobile money or USDT using the details in `TRIAXIS_PAY_BANK`, `TRIAXIS_PAY_MOBILE_MONEY` and `TRIAXIS_PAY_USDT`, and submits the payment reference. A member can have three payments waiting at once.
 

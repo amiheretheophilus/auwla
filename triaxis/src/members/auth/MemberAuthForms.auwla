@@ -1,6 +1,7 @@
 import { navigate } from '@memoized-dom/router';
 import { memberLogin, signUp } from '#server-functions';
 import { AuthForm } from './AuthForm.auwla';
+import { PasswordField } from '../../auth/PasswordField.auwla';
 
 <style>
   .hint {
@@ -24,11 +25,24 @@ function formError(failed: boolean, message: string | undefined, fallback: strin
   return message ?? fallback;
 }
 
-export function MemberSignInForm() {
+/** `?plan=` for the plan a visitor picked on the pricing page, or no query. */
+function planQuery(plan: string): Record<string, string> {
+  if (plan) {
+    return { plan };
+  }
+  return {};
+}
+
+export function MemberSignInForm({ plan }: { plan: string }) {
   const form = $forms((fields: FormData) => {
     const request = memberLogin(String(fields.get('email') ?? '').trim(), String(fields.get('password') ?? ''));
     $track(form).onSuccess(() => {
-      navigate('/app', { replace: true });
+      // Someone who picked a plan carries on to pay for it; anyone else goes to their signals.
+      if (plan) {
+        navigate('/app/subscribe', { replace: true, query: planQuery(plan) });
+      } else {
+        navigate('/app', { replace: true });
+      }
     });
     return request;
   });
@@ -39,18 +53,15 @@ export function MemberSignInForm() {
     <AuthForm submit={form.submit} pending={form.pending} action="Sign in" pendingAction="Signing in…" error={error}>
       <label class="desk-label">
         "Email"
-        <input name="email" type="email" autocomplete="username" maxlength={254} required />
+        <input name="email" type="email" autocomplete="username" maxlength={254} placeholder="you@example.com" required />
       </label>
-      <label class="desk-label">
-        "Password"
-        <input name="password" type="password" autocomplete="current-password" maxlength={128} required />
-      </label>
-      <span slot="switch">"New to Triaxis? " <a class="switch-link" route-to="/sign-up">"Create an account"</a></span>
+      <PasswordField label="Password" autocomplete="current-password" id="member-password" />
+      <span slot="switch">"New to Triaxis? " <a class="switch-link" route-to={{ path: '/sign-up', query: planQuery(plan) }}>"Create an account"</a></span>
     </AuthForm>
   );
 }
 
-export function MemberSignUpForm() {
+export function MemberSignUpForm({ plan }: { plan: string }) {
   const form = $forms((fields: FormData) => {
     const request = signUp(
       String(fields.get('name') ?? '').trim(),
@@ -58,7 +69,7 @@ export function MemberSignUpForm() {
       String(fields.get('password') ?? ''),
     );
     $track(form).onSuccess(() => {
-      navigate('/app/subscribe', { replace: true });
+      navigate('/app/subscribe', { replace: true, query: planQuery(plan) });
     });
     return request;
   });
@@ -69,18 +80,15 @@ export function MemberSignUpForm() {
     <AuthForm submit={form.submit} pending={form.pending} action="Create account" pendingAction="Creating account…" error={error}>
       <label class="desk-label">
         "Full name"
-        <input name="name" autocomplete="name" minlength={2} maxlength={80} required />
+        <input name="name" autocomplete="name" minlength={2} maxlength={80} placeholder="Ama Mensah" required />
       </label>
       <label class="desk-label">
         "Email"
-        <input name="email" type="email" autocomplete="email" maxlength={254} required />
+        <input name="email" type="email" autocomplete="email" maxlength={254} placeholder="you@example.com" required />
       </label>
-      <label class="desk-label">
-        "Password"
-        <input name="password" type="password" autocomplete="new-password" minlength={12} maxlength={128} required aria-describedby="password-hint" />
-      </label>
+      <PasswordField label="Password" autocomplete="new-password" id="new-password" minLength={12} describedBy="password-hint" />
       <p class="hint" id="password-hint">"At least 12 characters."</p>
-      <span slot="switch">"Already a member? " <a class="switch-link" route-to="/sign-in">"Sign in"</a></span>
+      <span slot="switch">"Already a member? " <a class="switch-link" route-to={{ path: '/sign-in', query: planQuery(plan) }}>"Sign in"</a></span>
     </AuthForm>
   );
 }

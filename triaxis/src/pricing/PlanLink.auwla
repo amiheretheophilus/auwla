@@ -1,0 +1,70 @@
+import type { Plan } from '../members/plans';
+
+<style>
+  .cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    min-height: 3.1rem;
+    border: 1px solid #27211d;
+    border-radius: 999px;
+    color: #27211d;
+    font-size: .95rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background-color .2s ease, color .2s ease, border-color .2s ease;
+  }
+
+  .cta:hover {
+    background: #27211d;
+    color: #f1ebe1;
+  }
+
+  /* On the dark, featured card the button is the red one. */
+  .cta[data-featured="true"] {
+    border-color: #a8271c;
+    background: #a8271c;
+    color: #fff9f0;
+  }
+
+  .cta[data-featured="true"]:hover {
+    border-color: #c8392b;
+    background: #c8392b;
+  }
+
+  .cta span {
+    transition: translate .3s cubic-bezier(.16, 1, .3, 1);
+  }
+
+  .cta:hover span {
+    translate: .25rem 0;
+  }
+
+  .cta:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 3px;
+  }
+</style>
+
+/**
+ * A plan card's call to action: a visitor goes to sign-up, a member straight to checkout, and
+ * either way the plan comes along as `?plan=`.
+ */
+export function PlanLink({ plan, member }: { plan: Plan; member: boolean }) {
+  const featured = plan.scope === 'all';
+
+  return (
+    <>
+      if (member) {
+        <a class="cta" data-featured={String(featured)} route-to={{ path: '/app/subscribe', query: { plan: plan.id } }}>
+          "Choose this plan" <span aria-hidden="true">"→"</span>
+        </a>
+      } else {
+        <a class="cta" data-featured={String(featured)} route-to={{ path: '/sign-up', query: { plan: plan.id } }}>
+          "Get started" <span aria-hidden="true">"→"</span>
+        </a>
+      }
+    </>
+  );
+}

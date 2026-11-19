@@ -4,8 +4,9 @@ import { MarketCoverage } from './home/MarketCoverage.auwla';
 import { MarketHero } from './home/MarketHero.auwla';
 import { SignalApproach } from './home/SignalApproach.auwla';
 import { SiteFooter } from './home/SiteFooter.auwla';
+import { PlansSection } from './home/PlansSection.auwla';
 import { AnalysisPage, AnalystDesk, DeskSignIn, PaymentsPage } from './desk/DeskRoutes.auwla';
-import { MemberApp, MemberSignIn, MemberSignUp, MemberSubscribe } from './members/MemberRoutes.auwla';
+import { MemberApp, MemberSignIn, MemberSignUp, MemberSubscribe, PricingRoute } from './members/MemberRoutes.auwla';
 
 <style>
   body {
@@ -206,8 +207,9 @@ function MarketHome() {
         <nav aria-label="Main navigation">
           <a class="nav-link" href="#markets">"Markets"</a>
           <a class="nav-link" href="#approach">"Approach"</a>
+          <a class="nav-link" href="#plans">"Pricing"</a>
           <a class="nav-link" href="/sign-in">"Sign in"</a>
-          <a class="nav-desk" href="/sign-up">"Subscribe" <span aria-hidden="true">"→"</span></a>
+          <a class="nav-desk" href="/pricing">"Subscribe" <span aria-hidden="true">"→"</span></a>
         </nav>
       </header>
 
@@ -216,6 +218,7 @@ function MarketHome() {
         <InstrumentTicker />
         <MarketCoverage />
         <SignalApproach />
+        <PlansSection />
       </main>
 
       <SiteFooter />
@@ -231,6 +234,7 @@ export function App() {
       <AnalysisPage route="/desk/analyses/:id" />
       <PaymentsPage route="/desk/payments" />
       <DeskSignIn route="/desk/sign-in" />
+      <PricingRoute route="/pricing" />
       <MemberSignIn route="/sign-in" />
       <MemberSignUp route="/sign-up" />
       <MemberApp route="/app" />

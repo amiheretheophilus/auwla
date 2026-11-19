@@ -1,0 +1,202 @@
+import '../desk/desk-theme.auwla';
+import type { Member } from '../members/membership';
+import { MemberHeader } from '../members/layout/MemberHeader.auwla';
+import type { Plan } from '../members/plans';
+import { PlanCard } from './PlanCard.auwla';
+import { PlanLink } from './PlanLink.auwla';
+
+<style>
+  body {
+    margin: 0;
+  }
+
+  .desk {
+    min-height: 100vh;
+    background: var(--desk-paper);
+    color: var(--desk-ink);
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-synthesis: none;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .pricing {
+    max-width: 64rem;
+    margin-inline: auto;
+    padding: clamp(2.5rem, 6vw, 5rem) var(--desk-gutter) 0;
+  }
+
+  .intro {
+    max-width: 40rem;
+    margin: 0 auto clamp(2rem, 5vw, 3.5rem);
+    text-align: center;
+  }
+
+  .kicker {
+    margin: 0 0 .9rem;
+    color: var(--desk-accent);
+    font-weight: 500;
+  }
+
+  .intro h1 {
+    margin: 0 0 1rem;
+    font-size: clamp(2.8rem, 7vw, 5.5rem);
+    font-weight: 400;
+    line-height: .92;
+    letter-spacing: -.07em;
+  }
+
+  .intro p {
+    margin: 0;
+    color: var(--desk-muted);
+    font-size: 1.05rem;
+    line-height: 1.5;
+    text-wrap: balance;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+    gap: clamp(1rem, 2.5vw, 1.5rem);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .fine {
+    margin: 1.25rem 0 0;
+    color: var(--desk-muted);
+    font-size: .82rem;
+    text-align: center;
+  }
+
+  /* How paying works, in three ruled steps. */
+  .how {
+    margin-top: clamp(3rem, 7vw, 5rem);
+  }
+
+  .how h2 {
+    margin: 0 0 1.25rem;
+    font-size: clamp(1.5rem, 3vw, 2.2rem);
+    font-weight: 400;
+    letter-spacing: -.05em;
+  }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--desk-ink);
+    list-style: none;
+    counter-reset: step;
+  }
+
+  .steps li {
+    display: grid;
+    align-content: start;
+    gap: .5rem;
+    padding: 1.25rem 1.5rem 1.25rem 0;
+    counter-increment: step;
+  }
+
+  .steps li + li {
+    padding-left: 1.5rem;
+    border-left: 1px solid var(--desk-rule);
+  }
+
+  .steps li::before {
+    color: var(--desk-accent);
+    font-family: var(--desk-mono);
+    font-size: .75rem;
+    content: "0" counter(step);
+  }
+
+  .steps strong {
+    font-size: 1.05rem;
+    font-weight: 500;
+  }
+
+  .steps span {
+    color: var(--desk-muted);
+    font-size: .88rem;
+    line-height: 1.5;
+  }
+
+  .risk-note {
+    margin: 0;
+    padding: 3rem 0 2rem;
+    color: var(--desk-muted);
+    font-size: .8rem;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .intro > * {
+      animation: tx-rise .8s var(--desk-ease) both;
+    }
+
+    .intro > :nth-child(2) { animation-delay: .06s; }
+    .intro > :nth-child(3) { animation-delay: .12s; }
+
+    .cards li {
+      animation: tx-rise .8s var(--desk-ease) .15s both;
+    }
+
+    .cards li:nth-child(2) {
+      animation-delay: .25s;
+    }
+  }
+
+  @media (max-width: 44rem) {
+    .steps {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .steps li,
+    .steps li + li {
+      padding: 1rem 0;
+      border-left: 0;
+    }
+
+    .steps li + li {
+      border-top: 1px solid var(--desk-rule);
+    }
+  }
+</style>
+
+/** `/pricing`: the plans, open to everyone. Choosing one leads to sign-up, or straight to checkout. */
+export function PricingPage({ member, plans }: { member: Member | null; plans: Plan[] }) {
+  return (
+    <div class="desk">
+      <MemberHeader member={member} />
+      <main class="pricing">
+        <div class="intro">
+          <p class="kicker">"Pricing"</p>
+          <h1>"Pick your axes."</h1>
+          <p>"Follow one market, or all three. Every signal is checked on the desk before it reaches you."</p>
+        </div>
+
+        <ul class="cards" aria-label="Plans">
+          for (const plan of plans) {
+            <li key={plan.id}>
+              <PlanCard plan={plan}>
+                <PlanLink slot="action" plan={plan} member={member !== null} />
+              </PlanCard>
+            </li>
+          }
+        </ul>
+        <p class="fine">"Prices in US dollars. Longer plans are on the way."</p>
+
+        <section class="how" aria-labelledby="how-heading">
+          <h2 id="how-heading">"How paying works"</h2>
+          <ol class="steps">
+            <li><strong>"Choose a plan"</strong> <span>"Create your account, then pick one axis or all three."</span></li>
+            <li><strong>"Pay your way"</strong> <span>"Bank transfer, mobile money or USDT, using the details shown at checkout."</span></li>
+            <li><strong>"Send the reference"</strong> <span>"We match it to your payment, and your signals open as soon as it is confirmed."</span></li>
+          </ol>
+        </section>
+
+        <p class="risk-note">"Trading involves risk. Signals are information, not financial advice, and past results do not promise future ones."</p>
+      </main>
+    </div>
+  );
+}

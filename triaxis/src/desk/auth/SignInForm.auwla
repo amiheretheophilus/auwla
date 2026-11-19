@@ -1,5 +1,6 @@
 import { navigate } from '@memoized-dom/router';
 import { login } from '#server-functions';
+import { PasswordField } from '../../auth/PasswordField.auwla';
 
 <style>
   .sign-in {
@@ -61,10 +62,7 @@ export function SignInForm({ enabled }: { enabled: boolean }) {
         "Staff email"
         <input id="desk-email" name="email" type="email" autocomplete="username" maxlength={254} required />
       </label>
-      <label class="desk-label" for="desk-password">
-        "Password"
-        <input id="desk-password" name="password" type="password" autocomplete="current-password" maxlength={128} required />
-      </label>
+      <PasswordField label="Password" autocomplete="current-password" id="desk-password" />
       <button class="desk-button" type="submit" disabled={form.pending}>
         form.pending ? "Signing in…" : "Sign in"
         if (!form.pending) {
