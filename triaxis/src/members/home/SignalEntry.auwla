@@ -1,0 +1,81 @@
+import { formatSignalTime, levelsText, postedReview, type PublishedSignal } from '../../signals/signal-card';
+import { SignalCardPreview } from '../../signals/SignalCardPreview.auwla';
+
+<style>
+  .entry {
+    display: grid;
+    grid-template-columns: minmax(16rem, 24rem) minmax(0, 1fr);
+    gap: clamp(1.25rem, 3vw, 2.5rem);
+    padding: 1.75rem 0;
+  }
+
+  .levels {
+    display: grid;
+    align-content: start;
+    gap: .9rem;
+  }
+
+  .levels h3 {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 500;
+    letter-spacing: -.02em;
+  }
+
+  .levels time {
+    color: var(--desk-muted);
+    font-family: var(--desk-mono);
+    font-size: .75rem;
+  }
+
+  .levels pre {
+    margin: 0;
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--desk-rule);
+    border-radius: 2px;
+    background: var(--desk-input);
+    font-family: var(--desk-mono);
+    font-size: .88rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+
+  .levels .desk-button {
+    justify-self: start;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .entry {
+      animation: tx-rise .6s var(--desk-ease) both;
+    }
+  }
+
+  @media (max-width: 52rem) {
+    .entry {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>
+
+/** One posted signal in full: its card beside its levels as copyable text. */
+export function SignalEntry({ signal, copied, onCopy }: { signal: PublishedSignal; copied: boolean; onCopy: (signal: PublishedSignal) => void }) {
+  return (
+    <article class="entry" aria-label={signal.id}>
+      <SignalCardPreview card={signal.card} review={postedReview} signalId={signal.id} publishedAt={signal.publishedAt} />
+      <div class="levels">
+        <div>
+          <h3>signal.card.symbol + " · " + signal.card.direction</h3>
+          <time datetime={signal.publishedAt}>signal.id + " · " + formatSignalTime(signal.publishedAt)</time>
+        </div>
+        <pre aria-label={'Levels for ' + signal.id}>levelsText(signal.card)</pre>
+        <button class="desk-button desk-button--quiet" type="button" onClick={() => onCopy(signal)}>
+          if (copied) {
+            "Copied"
+          } else {
+            "Copy levels"
+          }
+        </button>
+      </div>
+    </article>
+  );
+}

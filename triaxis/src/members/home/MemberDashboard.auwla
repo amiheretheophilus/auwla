@@ -1,7 +1,7 @@
 import { formatDay, paymentStatusLabels, type AxisAccess, type MemberHome } from '../membership';
 import { axisLabel, findPlan, planLength, planTitle } from '../plans';
-import { formatSignalTime, levelsText, postedReview, type PublishedSignal } from '../../signals/signal-card';
-import { SignalCardPreview } from '../../signals/SignalCardPreview.auwla';
+import { formatSignalTime, levelsText, type PublishedSignal } from '../../signals/signal-card';
+import { SignalEntry } from './SignalEntry.auwla';
 
 <style>
   .title {
@@ -201,55 +201,105 @@ import { SignalCardPreview } from '../../signals/SignalCardPreview.auwla';
     outline-offset: 2px;
   }
 
-  .feed {
-    display: grid;
-    gap: 0;
+  .latest {
+    border-bottom: 1px solid var(--desk-rule);
+  }
+
+  /* Older signals: one ruled row each, opened in place. */
+  .earlier-head {
+    margin: 2.25rem 0 0;
+    padding-bottom: .7rem;
+    border-bottom: 1px solid var(--desk-ink);
+    color: var(--desk-muted);
+    font-size: .8rem;
+    font-weight: 500;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .earlier {
     margin: 0;
     padding: 0;
     list-style: none;
   }
 
-  .entry {
-    display: grid;
-    grid-template-columns: minmax(16rem, 24rem) minmax(0, 1fr);
-    gap: clamp(1.25rem, 3vw, 2.5rem);
-    padding: 1.75rem 0;
+  .older {
     border-bottom: 1px solid var(--desk-rule);
   }
 
-  .levels {
+  .older summary {
     display: grid;
-    align-content: start;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    align-items: center;
     gap: .9rem;
+    padding: 1rem 0;
+    list-style: none;
+    cursor: pointer;
   }
 
-  .levels h3 {
-    margin: 0;
-    font-size: 1.15rem;
+  .older summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .older summary::before {
+    width: .5rem;
+    height: .5rem;
+    border-radius: 50%;
+    background: var(--axis-color);
+    content: "";
+  }
+
+  .older[data-axis="forex"] { --axis-color: #3987e5; }
+  .older[data-axis="crypto"] { --axis-color: #9085e9; }
+  .older[data-axis="synthetics"] { --axis-color: #eda100; }
+
+  .older strong {
+    font-size: 1rem;
     font-weight: 500;
-    letter-spacing: -.02em;
+    letter-spacing: -.015em;
   }
 
-  .levels time {
+  .older time {
     color: var(--desk-muted);
     font-family: var(--desk-mono);
     font-size: .75rem;
   }
 
-  .levels pre {
-    margin: 0;
-    padding: 1rem 1.1rem;
-    border: 1px solid var(--desk-rule);
-    border-radius: 2px;
-    background: var(--desk-input);
-    font-family: var(--desk-mono);
-    font-size: .88rem;
-    line-height: 1.6;
-    white-space: pre-wrap;
+  /* A plus that turns into a minus while the row is open. */
+  .older__toggle {
+    position: relative;
+    width: .8rem;
+    height: .8rem;
   }
 
-  .levels .desk-button {
-    justify-self: start;
+  .older__toggle::before,
+  .older__toggle::after {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 100%;
+    height: 1.5px;
+    background: var(--desk-ink);
+    content: "";
+    translate: 0 -50%;
+    transition: rotate .3s var(--desk-ease);
+  }
+
+  .older__toggle::after {
+    rotate: 90deg;
+  }
+
+  .older[open] .older__toggle::after {
+    rotate: 0deg;
+  }
+
+  .older summary:hover strong {
+    color: var(--desk-accent);
+  }
+
+  .older summary:focus-visible {
+    outline: 2px solid var(--desk-ink);
+    outline-offset: 2px;
   }
 
   .empty {
@@ -274,8 +324,7 @@ import { SignalCardPreview } from '../../signals/SignalCardPreview.auwla';
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    .axis,
-    .entry {
+    .axis {
       animation: tx-rise .6s var(--desk-ease) both;
     }
 
@@ -297,8 +346,13 @@ import { SignalCardPreview } from '../../signals/SignalCardPreview.auwla';
       border-top: 1px solid var(--desk-rule);
     }
 
-    .entry {
-      grid-template-columns: minmax(0, 1fr);
+    .older summary {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+    }
+
+    .older time {
+      grid-row: 2;
+      grid-column: 2;
     }
   }
 </style>
@@ -330,7 +384,10 @@ export function MemberDashboard({ home }: { home: MemberHome }) {
 
   const held = home.access.filter(entry => entry.active);
   const firstName = home.member.name.split(' ')[0] ?? home.member.name;
+  // Signals arrive newest first. The newest is shown in full; the earlier ones wait folded.
   const visible = home.signals.filter(signal => axisFilter === 'all' || signal.card.axis === axisFilter);
+  const latest = visible[0];
+  const earlier = visible.slice(1);
   const latestPayment = home.payments.find(payment => payment.status !== 'approved');
 
   function copyLevels(signal: PublishedSignal) {
@@ -388,33 +445,32 @@ export function MemberDashboard({ home }: { home: MemberHome }) {
           <h3>"No axes yet"</h3>
           <p>"Unlock an axis above, and its signals appear here as soon as they are posted."</p>
         </div>
-      } else if (visible.length === 0) {
+      } else if (latest) {
+        <div class="latest">
+          <SignalEntry signal={latest} copied={copiedId === latest.id} onCopy={copyLevels} />
+        </div>
+        if (earlier.length > 0) {
+          <h3 class="earlier-head">"Earlier signals · " + earlier.length</h3>
+          <ul class="earlier" aria-label="Earlier signals">
+            for (const signal of earlier) {
+              <li key={signal.id}>
+                <details class="older" data-axis={signal.card.axis}>
+                  <summary>
+                    <strong>signal.card.symbol + " · " + signal.card.direction</strong>
+                    <time datetime={signal.publishedAt}>signal.id + " · " + formatSignalTime(signal.publishedAt)</time>
+                    <span class="older__toggle" aria-hidden="true"></span>
+                  </summary>
+                  <SignalEntry signal={signal} copied={copiedId === signal.id} onCopy={copyLevels} />
+                </details>
+              </li>
+            }
+          </ul>
+        }
+      } else {
         <div class="empty">
           <h3>"No signals yet"</h3>
           <p>"New signals on your axes appear here as soon as an analyst posts them."</p>
         </div>
-      } else {
-        <ul class="feed" aria-label="Signals">
-          for (const signal of visible) {
-            <li key={signal.id} class="entry">
-              <SignalCardPreview card={signal.card} review={postedReview} signalId={signal.id} publishedAt={signal.publishedAt} />
-              <div class="levels">
-                <div>
-                  <h3>signal.card.symbol + " · " + signal.card.direction</h3>
-                  <time datetime={signal.publishedAt}>signal.id + " · " + formatSignalTime(signal.publishedAt)</time>
-                </div>
-                <pre aria-label={'Levels for ' + signal.id}>levelsText(signal.card)</pre>
-                <button class="desk-button desk-button--quiet" type="button" onClick={() => copyLevels(signal)}>
-                  if (copiedId === signal.id) {
-                    "Copied"
-                  } else {
-                    "Copy levels"
-                  }
-                </button>
-              </div>
-            </li>
-          }
-        </ul>
       }
     </section>
   );

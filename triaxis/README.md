@@ -56,7 +56,7 @@ Visitors create an account at `/sign-up` and sign in at `/sign-in`. Better Auth 
 
 An admin approves or rejects each payment at `/desk/payments`. A payment is decided once; approving it adds the plan's months to each axis it covers, starting where the member's current access ends, so a renewal adds time on top. Admins hold every axis for life.
 
-`/signals` shows the member's axes, held or locked (a locked one links to checkout with that axis picked), any payment waiting, and the posted signals on the axes they hold, newest first, with the levels as copyable text. Which signals a member may see is decided on the server (`server/members/access.ts`); a locked axis sends none of its signals to the page. Member code is in `src/members` and `server/members`; the server functions are in `server/functions/members.ts`.
+`/signals` shows the member's axes, held or locked (a locked one links to checkout with that axis picked), any payment waiting, and the posted signals on the axes they hold, newest first: the newest in full with its levels as copyable text, the earlier ones folded into rows that open in place. Which signals a member may see is decided on the server (`server/members/access.ts`); a locked axis sends none of its signals to the page. Member code is in `src/members` and `server/members`; the server functions are in `server/functions/members.ts`.
 
 Not built yet: expiry reminders, revoking access, upgrade pricing, Google and phone sign-in, and referral codes.
 
