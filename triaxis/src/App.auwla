@@ -5,6 +5,7 @@ import { MarketHero } from './home/MarketHero.auwla';
 import { SignalApproach } from './home/SignalApproach.auwla';
 import { SiteFooter } from './home/SiteFooter.auwla';
 import { PlansSection } from './home/PlansSection.auwla';
+import { getMember } from '#server/members/access';
 import { AnalysisPage, AnalystDesk, DeskSignIn, PaymentsPage } from './desk/DeskRoutes.auwla';
 import { MemberApp, MemberSignIn, MemberSignUp, MemberSubscribe, PricingRoute } from './members/MemberRoutes.auwla';
 
@@ -193,6 +194,15 @@ import { MemberApp, MemberSignIn, MemberSignUp, MemberSubscribe, PricingRoute } 
 </style>
 
 function MarketHome() {
+  // Who is reading: the header offers a signed-in member their signals, not sign-in and subscribe.
+  const visit = $routed(async ({ request }) => {
+    const signedIn = await getMember(request);
+    if (signedIn) {
+      return { member: signedIn.member };
+    }
+    return { member: null };
+  });
+
   return (
     <div class="site-page" id="top">
       <header class="site-header">
@@ -208,8 +218,15 @@ function MarketHome() {
           <a class="nav-link" href="#markets">"Markets"</a>
           <a class="nav-link" href="#approach">"Approach"</a>
           <a class="nav-link" href="#plans">"Pricing"</a>
-          <a class="nav-link" href="/sign-in">"Sign in"</a>
-          <a class="nav-desk" href="/pricing">"Subscribe" <span aria-hidden="true">"→"</span></a>
+          if (visit.member) {
+            if (visit.member.staff) {
+              <a class="nav-link" href="/desk">"Desk"</a>
+            }
+            <a class="nav-desk" href="/signals">"Your signals" <span aria-hidden="true">"→"</span></a>
+          } else {
+            <a class="nav-link" href="/sign-in">"Sign in"</a>
+            <a class="nav-desk" href="/pricing">"Subscribe" <span aria-hidden="true">"→"</span></a>
+          }
         </nav>
       </header>
 
@@ -218,7 +235,7 @@ function MarketHome() {
         <InstrumentTicker />
         <MarketCoverage />
         <SignalApproach />
-        <PlansSection />
+        <PlansSection member={visit.member !== null} />
       </main>
 
       <SiteFooter />
@@ -237,8 +254,8 @@ export function App() {
       <PricingRoute route="/pricing" />
       <MemberSignIn route="/sign-in" />
       <MemberSignUp route="/sign-up" />
-      <MemberApp route="/app" />
-      <MemberSubscribe route="/app/subscribe" />
+      <MemberApp route="/signals" />
+      <MemberSubscribe route="/subscribe" />
     </>
   );
 }

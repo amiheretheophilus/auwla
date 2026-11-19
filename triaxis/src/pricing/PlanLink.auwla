@@ -57,7 +57,7 @@ export function PlanLink({ plan, member }: { plan: Plan; member: boolean }) {
   return (
     <>
       if (member) {
-        <a class="cta" data-featured={String(featured)} route-to={{ path: '/app/subscribe', query: { plan: plan.id } }}>
+        <a class="cta" data-featured={String(featured)} route-to={{ path: '/subscribe', query: { plan: plan.id } }}>
           "Choose this plan" <span aria-hidden="true">"→"</span>
         </a>
       } else {

@@ -39,9 +39,9 @@ export function MemberSignInForm({ plan }: { plan: string }) {
     $track(form).onSuccess(() => {
       // Someone who picked a plan carries on to pay for it; anyone else goes to their signals.
       if (plan) {
-        navigate('/app/subscribe', { replace: true, query: planQuery(plan) });
+        navigate('/subscribe', { replace: true, query: planQuery(plan) });
       } else {
-        navigate('/app', { replace: true });
+        navigate('/signals', { replace: true });
       }
     });
     return request;
@@ -69,7 +69,7 @@ export function MemberSignUpForm({ plan }: { plan: string }) {
       String(fields.get('password') ?? ''),
     );
     $track(form).onSuccess(() => {
-      navigate('/app/subscribe', { replace: true, query: planQuery(plan) });
+      navigate('/subscribe', { replace: true, query: planQuery(plan) });
     });
     return request;
   });

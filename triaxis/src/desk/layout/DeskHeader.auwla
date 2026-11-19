@@ -1,3 +1,4 @@
+import { route } from '@memoized-dom/router';
 import type { StaffMember } from '../analysis';
 import { Wordmark } from '../../brand/Wordmark.auwla';
 import { StaffBadge } from '../StaffBadge.auwla';
@@ -19,30 +20,60 @@ import { StaffBadge } from '../StaffBadge.auwla';
     backdrop-filter: blur(14px) saturate(1.4);
   }
 
+  /* The nav fills the header's height, so a link's bar can sit on the header's bottom edge. */
   .desk-header nav {
     display: flex;
-    align-items: center;
-    gap: clamp(.75rem, 2vw, 1.5rem);
+    align-self: stretch;
+    align-items: stretch;
+    gap: clamp(1rem, 2.4vw, 1.75rem);
     font-size: .875rem;
   }
 
-  .desk-header form {
+  .desk-header form,
+  .identity {
+    align-self: center;
     margin: 0;
   }
 
   .nav-link {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
     color: var(--desk-muted);
     text-decoration: none;
     transition: color .2s ease;
+  }
+
+  .nav-link::after {
+    position: absolute;
+    right: 0;
+    bottom: -1px;
+    left: 0;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    background: var(--desk-ink);
+    content: "";
+    transform: scaleX(0);
+    transition: transform .35s var(--desk-ease);
   }
 
   .nav-link:hover {
     color: var(--desk-ink);
   }
 
+  /* The page being shown. */
+  .nav-link[aria-current="page"] {
+    color: var(--desk-ink);
+    font-weight: 500;
+  }
+
+  .nav-link[aria-current="page"]::after {
+    transform: scaleX(1);
+  }
+
   .nav-link:focus-visible {
     outline: 2px solid var(--desk-ink);
-    outline-offset: 3px;
+    outline-offset: -2px;
   }
 
   .identity {
@@ -57,8 +88,20 @@ import { StaffBadge } from '../StaffBadge.auwla';
   }
 </style>
 
+/** `aria-current="page"` for the link to the page being shown, so it is marked and announced. */
+function currentPage(isCurrent: boolean): 'page' | undefined {
+  if (isCurrent) {
+    return 'page';
+  }
+  return undefined;
+}
+
 /** The desk's header. With `staff`, it shows who is signed in and a sign-out button. */
 export function DeskHeader({ staff }: { staff: StaffMember | null }) {
+  const path = route.pathname;
+  // An open analysis belongs to the analyses section.
+  const onAnalyses = path === '/desk' || path.startsWith('/desk/analyses/');
+
   return (
     <header class="desk-header">
       if (staff) {
@@ -68,9 +111,9 @@ export function DeskHeader({ staff }: { staff: StaffMember | null }) {
       }
       <nav aria-label="Desk navigation">
         if (staff) {
-          <a class="nav-link" href="/desk">"Analyses"</a>
+          <a class="nav-link" href="/desk" aria-current={currentPage(onAnalyses)}>"Analyses"</a>
           if (staff.role === 'admin') {
-            <a class="nav-link" href="/desk/payments">"Payments"</a>
+            <a class="nav-link" href="/desk/payments" aria-current={currentPage(path === '/desk/payments')}>"Payments"</a>
           }
         }
         <a class="nav-link" href="/">"Public site"</a>

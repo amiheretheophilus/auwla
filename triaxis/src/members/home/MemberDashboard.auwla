@@ -90,9 +90,37 @@ import { SignalCardPreview } from '../../signals/SignalCardPreview.auwla';
     color: var(--desk-pass);
   }
 
-  .axis .desk-button {
+  /* A locked axis's way in: a quiet text link, not another button. */
+  .unlock {
+    display: inline-flex;
+    align-items: center;
     justify-self: start;
-    margin-top: .35rem;
+    gap: .4rem;
+    margin-top: .3rem;
+    padding-bottom: .15rem;
+    border-bottom: 1px solid currentColor;
+    color: var(--desk-ink);
+    font-size: .88rem;
+    font-weight: 500;
+    text-decoration: none;
+    transition: color .2s ease;
+  }
+
+  .unlock span {
+    transition: translate .3s var(--desk-ease);
+  }
+
+  .unlock:hover {
+    color: var(--desk-accent);
+  }
+
+  .unlock:hover span {
+    translate: .25rem 0;
+  }
+
+  .unlock:focus-visible {
+    outline: 2px solid var(--desk-ink);
+    outline-offset: 3px;
   }
 
   .notice {
@@ -327,7 +355,9 @@ export function MemberDashboard({ home }: { home: MemberHome }) {
             <h2>entry.label</h2>
             <p>accessLine(entry)</p>
             if (!entry.active) {
-              <a class="desk-button desk-button--quiet" route-to="/app/subscribe">"Subscribe"</a>
+              <a class="unlock" route-to={{ path: '/subscribe', query: { plan: 'single-1m', axis: entry.axis } }}>
+                "Unlock " + entry.label <span aria-hidden="true">"→"</span>
+              </a>
             }
           </li>
         }
@@ -356,8 +386,7 @@ export function MemberDashboard({ home }: { home: MemberHome }) {
       if (held.length === 0) {
         <div class="empty">
           <h3>"No axes yet"</h3>
-          <p>"Subscribe to one axis or all three to see their signals here as soon as they are posted."</p>
-          <a class="desk-button" route-to="/app/subscribe">"See plans"</a>
+          <p>"Unlock an axis above, and its signals appear here as soon as they are posted."</p>
         </div>
       } else if (visible.length === 0) {
         <div class="empty">

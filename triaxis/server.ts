@@ -26,9 +26,24 @@ const privateResponse = define.middleware(async (_context, next) => {
   return new Response(response.body, { status: response.status, headers });
 });
 
+// The landing and pricing pages show who is signed in, in their header and plan buttons, so their
+// HTML is personal too. A path middleware matches everything under it, and '/' would take every
+// asset with it, so these two exact paths are checked here instead.
+const personalPages = new Set(['/', '/pricing']);
+app.use(define.middleware(async (context, next) => {
+  const response = await next();
+  if (!personalPages.has(new URL(context.request.url).pathname)) {
+    return response;
+  }
+  const headers = new Headers(response.headers);
+  headers.set('Cache-Control', 'private, no-store');
+  return new Response(response.body, { status: response.status, headers });
+}));
+
 app.use('/desk', privateResponse);
 app.use('/desk/sign-in', privateResponse);
-app.use('/app', privateResponse);
+app.use('/signals', privateResponse);
+app.use('/subscribe', privateResponse);
 app.use('/sign-in', privateResponse);
 app.use('/sign-up', privateResponse);
 app.use('/_memoized/routed', privateResponse);
@@ -46,7 +61,7 @@ app.ssr('/desk/payments', App, { delivery: 'buffer' });
 app.ssr('/pricing', App, { delivery: 'buffer' });
 app.ssr('/sign-in', App, { delivery: 'buffer' });
 app.ssr('/sign-up', App, { delivery: 'buffer' });
-app.ssr('/app', App, { delivery: 'buffer' });
-app.ssr('/app/subscribe', App, { delivery: 'buffer' });
+app.ssr('/signals', App, { delivery: 'buffer' });
+app.ssr('/subscribe', App, { delivery: 'buffer' });
 
 export default app;

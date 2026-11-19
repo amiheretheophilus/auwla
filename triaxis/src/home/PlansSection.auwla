@@ -92,8 +92,11 @@ import { PlanLink } from '../pricing/PlanLink.auwla';
   }
 </style>
 
-/** The plans on the public page, so visitors see the prices before they make an account. */
-export function PlansSection() {
+/**
+ * The plans on the public page, so visitors see the prices before they make an account. A member
+ * who is signed in goes straight to checkout from them.
+ */
+export function PlansSection({ member }: { member: boolean }) {
   return (
     <section class="plans" id="plans" aria-labelledby="plans-heading">
       <div class="intro">
@@ -109,7 +112,7 @@ export function PlansSection() {
           for (const plan of plansOnSale()) {
             <li key={plan.id} class="reveal">
               <PlanCard plan={plan}>
-                <PlanLink slot="action" plan={plan} member={false} />
+                <PlanLink slot="action" plan={plan} member={member} />
               </PlanCard>
             </li>
           }

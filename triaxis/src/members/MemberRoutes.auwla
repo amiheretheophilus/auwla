@@ -19,12 +19,21 @@ function chosenPlan(query: { get(name: string): string | null }): string {
   return '';
 }
 
+/** The axis a single-axis plan was opened for (`?axis=`), or ''. */
+function chosenAxis(query: { get(name: string): string | null }): string {
+  const axis = query.get('axis') ?? '';
+  if (axis === 'forex' || axis === 'crypto' || axis === 'synthetics') {
+    return axis;
+  }
+  return '';
+}
+
 /** Where a member goes once signed in: checkout with their plan picked, or their signals. */
 function afterSignIn(plan: string): string {
   if (plan) {
-    return `/app/subscribe?plan=${encodeURIComponent(plan)}`;
+    return `/subscribe?plan=${encodeURIComponent(plan)}`;
   }
-  return '/app';
+  return '/signals';
 }
 
 /** The sign-in page, keeping the plan a visitor picked. */
@@ -90,7 +99,7 @@ export function MemberSignUp() {
   );
 }
 
-/** `/app`: the member's axes and the signals on the ones they hold. */
+/** `/signals`: the member's axes and the signals on the ones they hold. */
 export function MemberApp() {
   const home = $routed(async ({ request }) => {
     const signedIn = await getMember(request);
@@ -111,7 +120,7 @@ export function MemberApp() {
   );
 }
 
-/** `/app/subscribe`: pick a plan, pay, and submit the reference. */
+/** `/subscribe`: pick a plan, pay, and submit the reference. */
 export function MemberSubscribe() {
   const page = $routed(async ({ request, query }) => {
     const plan = chosenPlan(query);
@@ -120,6 +129,7 @@ export function MemberSubscribe() {
     return {
       member: signedIn.member,
       plan,
+      axis: chosenAxis(query),
       access: accessFor(signedIn),
       payments: listMemberPayments(signedIn.member.id),
       instructions: paymentInstructions(),
@@ -128,7 +138,7 @@ export function MemberSubscribe() {
 
   return (
     <MemberShell member={page.member}>
-      <SubscribePage plans={plansOnSale()} chosen={page.plan} access={page.access} instructions={page.instructions} payments={page.payments} />
+      <SubscribePage plans={plansOnSale()} chosen={page.plan} chosenAxis={page.axis} access={page.access} instructions={page.instructions} payments={page.payments} />
     </MemberShell>
   );
 }

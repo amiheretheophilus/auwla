@@ -233,27 +233,34 @@
     outline-offset: 1px;
   }
 
+  /* The primary action: red, with a little depth. */
   .desk-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: .55rem;
-    min-height: 2.9rem;
-    padding: .75rem 1.35rem;
+    gap: .5rem;
+    box-sizing: border-box;
+    min-height: 2.75rem;
+    padding: .6rem 1.3rem;
     border: 1px solid var(--desk-accent);
     border-radius: 999px;
     background: var(--desk-accent);
     color: #fff9f0;
     font: inherit;
-    font-size: .92rem;
+    font-size: .9rem;
+    font-weight: 500;
+    line-height: 1.1;
+    white-space: nowrap;
     text-decoration: none;
+    box-shadow: 0 1px 2px #27211d1f, inset 0 1px 0 #ffffff1f;
     cursor: pointer;
-    transition: background-color .2s ease, border-color .2s ease, color .2s ease, scale .3s var(--desk-ease);
+    transition: background-color .2s ease, border-color .2s ease, color .2s ease, box-shadow .2s ease, scale .3s var(--desk-ease);
   }
 
   .desk-button:hover {
     border-color: var(--desk-accent-deep);
     background: var(--desk-accent-deep);
+    box-shadow: 0 .4rem 1rem -.5rem #8a2119a6, inset 0 1px 0 #ffffff1f;
   }
 
   .desk-button:active {
@@ -262,29 +269,34 @@
 
   .desk-button:disabled {
     opacity: .6;
+    box-shadow: none;
     cursor: wait;
   }
 
+  /* A secondary action: a light pill that darkens its edge on hover. */
   .desk-button--quiet {
-    min-height: 2.3rem;
-    padding: .45rem .95rem;
-    border-color: var(--desk-ink);
-    background: transparent;
+    min-height: 2.35rem;
+    padding: .45rem 1rem;
+    border-color: #d6cbbd;
+    background: #fffdf9;
     color: var(--desk-ink);
     font-size: .85rem;
+    box-shadow: 0 1px 2px #27211d0a;
   }
 
   .desk-button--quiet:hover {
     border-color: var(--desk-ink);
-    background: var(--desk-ink);
-    color: var(--desk-paper);
+    background: #ffffff;
+    color: var(--desk-ink);
+    box-shadow: 0 .35rem .9rem -.55rem #27211d4d;
   }
 
   .desk-button--quiet:disabled {
-    border-color: var(--desk-rule);
+    border-color: #e2d9cd;
     background: transparent;
     color: var(--desk-muted);
     opacity: .7;
+    box-shadow: none;
     cursor: default;
   }
 

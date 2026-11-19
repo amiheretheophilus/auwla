@@ -286,6 +286,8 @@ interface SubscribeProps {
   plans: Plan[];
   /** The plan picked on the pricing page, or ''. */
   chosen: string;
+  /** The axis picked from a locked axis on the signals page, or ''. */
+  chosenAxis: string;
   access: AxisAccess[];
   instructions: Instruction[];
   payments: PaymentSummary[];
@@ -310,9 +312,9 @@ function heldLine(entry: AxisAccess | undefined): string {
   return 'Held until ' + formatDay(entry.expiresAt) + '. Time is added on top.';
 }
 
-export function SubscribePage({ plans, chosen, access, instructions, payments }: SubscribeProps) {
+export function SubscribePage({ plans, chosen, chosenAxis, access, instructions, payments }: SubscribeProps) {
   let planId = startingPlan(plans, chosen);
-  let axis = 'forex';
+  let axis = chosenAxis || 'forex';
   let method = instructions[0]?.method ?? 'bank';
   let submitted = false;
 
@@ -362,7 +364,7 @@ export function SubscribePage({ plans, chosen, access, instructions, payments }:
         <div class="done" role="status">
           <h2>"Payment submitted"</h2>
           <p>summary + ". We will check the reference and open your access once it is approved."</p>
-          <a class="desk-button" route-to="/app">"Back to your signals"</a>
+          <a class="desk-button" route-to="/signals">"Back to your signals"</a>
         </div>
       } else {
         <form class="steps" onSubmit={claim.submit}>
