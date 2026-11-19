@@ -174,4 +174,13 @@
   html {
     scroll-behavior: smooth;
   }
+
+  /* No visible scrollbars anywhere on the site. Wheel, touch and keys still scroll. */
+  * {
+    scrollbar-width: none;
+  }
+
+  *::-webkit-scrollbar {
+    display: none;
+  }
 </style>
