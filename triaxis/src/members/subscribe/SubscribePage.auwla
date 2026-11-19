@@ -326,6 +326,22 @@ export function SubscribePage({ plans, chosen, access, instructions, payments }:
     summary = `${planTitle(plan)} for ${planLength(plan)}`;
   }
 
+  /**
+   * A click on a plan card. The card is a label around a hidden radio at its top, and a label
+   * click focuses that radio, which the browser scrolls into view: with the card's top scrolled
+   * off, the page jumped up. So the click picks the plan itself and focuses without scrolling.
+   * Keyboard use is untouched: an arrow key selects the next radio by firing a click on the radio
+   * itself, which must go through, so only clicks on the rest of the card are taken here.
+   */
+  function pickPlan(event: MouseEvent & { currentTarget: HTMLLabelElement }, id: string) {
+    if (event.target instanceof HTMLInputElement) {
+      return;
+    }
+    event.preventDefault();
+    planId = id;
+    event.currentTarget.querySelector('input')?.focus({ preventScroll: true });
+  }
+
   const claim = $forms((fields: FormData) => {
     const request = claimPayment(planId, axis, method, String(fields.get('reference') ?? ''));
     $track(claim).onSuccess(outcome => {
@@ -359,7 +375,7 @@ export function SubscribePage({ plans, chosen, access, instructions, payments }:
               <fieldset class="plan-picks">
                 <legend class="visually-hidden">"Plan"</legend>
                 for (const option of plans) {
-                  <label key={option.id} class="plan-pick">
+                  <label key={option.id} class="plan-pick" onClick={(event) => pickPlan(event, option.id)}>
                     <input class="visually-hidden" type="radio" name="plan" value={option.id} checked={planId === option.id} onChange={() => planId = option.id} />
                     <PlanCard plan={option} selected={planId === option.id}>
                       if (planId === option.id) {
