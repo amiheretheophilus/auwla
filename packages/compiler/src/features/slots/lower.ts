@@ -217,7 +217,7 @@ class Lowering {
     if (is.JSXElement(child)) return this.#consumeMarker(child);
     if (!is.JSXExpressionContainer(child) || is.JSXEmptyExpression(child.expression)) return undefined;
     const leaves = jsxLeaves(child.expression);
-    const marked = leaves.filter((leaf) => markerOf(leaf) !== undefined);
+    const marked = leaves.filter(isMarkedLeaf);
     if (marked.length === 0) return undefined;
     const names = new Set(marked.map((leaf) => this.#staticAttribute(leaf, 'slot')));
     if (marked.length !== leaves.length || names.size !== 1) {
@@ -368,10 +368,17 @@ function markerOf(element: JsxElement): JsxAttribute | undefined {
   return marker !== undefined && is.JSXAttribute(marker) ? marker : undefined;
 }
 
-/** The elements an expression child can give: through `?:`, `&&`, `||`, `??` and a `.map` callback. */
-function jsxLeaves(expression: Node): JsxElement[] {
+/**
+ * The elements an expression child can give: through `?:`, `&&`, `||`, `??`, a `.map` callback,
+ * and a fragment's children. A `.auwla` `if`/`else` child arrives as `(test)?<>…</>:<>…</>`, each
+ * branch in a fragment, so without looking through fragments its marked branches were refused
+ * (Triaxis, 2026-11-19). Text in such a fragment is content too: it is returned as a leaf of its
+ * own, never marked, so marked and unmarked content together stays an error.
+ */
+function jsxLeaves(expression: Node): (JsxElement | Node)[] {
   if (is.ParenthesizedExpression(expression)) return jsxLeaves(expression.expression);
   if (is.JSXElement(expression)) return [expression];
+  if (is.JSXFragment(expression)) return expression.children.flatMap(fragmentLeaves);
   if (is.ConditionalExpression(expression)) return [...jsxLeaves(expression.consequent), ...jsxLeaves(expression.alternate)];
   if (is.LogicalExpression(expression)) return [...jsxLeaves(expression.left), ...jsxLeaves(expression.right)];
   if (is.CallExpression(expression) && is.MemberExpression(expression.callee) && !expression.callee.computed
@@ -384,6 +391,28 @@ function jsxLeaves(expression: Node): JsxElement[] {
     }
   }
   return [];
+}
+
+/** What one child of a fragment gives: an element, the leaves of an expression, or its text. */
+function fragmentLeaves(child: Node): (JsxElement | Node)[] {
+  if (is.JSXElement(child) || is.JSXFragment(child)) {
+    return jsxLeaves(child);
+  }
+  if (is.JSXExpressionContainer(child)) {
+    if (is.JSXEmptyExpression(child.expression)) {
+      return [];
+    }
+    return jsxLeaves(child.expression);
+  }
+  if (is.JSXText(child) && (child.value === '' || isLayoutText(child))) {
+    return [];
+  }
+  return [child];
+}
+
+/** A leaf that is an element carrying a `slot` marker. */
+function isMarkedLeaf(leaf: JsxElement | Node): leaf is JsxElement {
+  return is.JSXElement(leaf) && markerOf(leaf) !== undefined;
 }
 
 /** The line breaks and indentation between JSX children, which JSX drops. */

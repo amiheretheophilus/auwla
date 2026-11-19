@@ -34,6 +34,18 @@ describe('the props a slot component reads its content from', () => {
     expect(lower('function App() { return <Panel><b slot="top">T</b><p>body</p></Panel>; }'))
       .toBe('function App() { return <Panel slot:top={<b>T</b>}><p>body</p></Panel>; }');
   });
+
+  // A `.auwla` `if`/`else` child arrives as `(test)?<>…</>:<>…</>`: each branch in a fragment.
+  // Found in Triaxis (2026-11-19): marked branches were refused as "not a direct child".
+  it('looks through the fragments of a lowered if/else to its marked branches', () => {
+    expect(lower('function App() { let c; return <Panel>{(c)?<><b slot="top">on</b></>:<><i slot="top">off</i></>}</Panel>; }'))
+      .toBe('function App() { let c; return <Panel slot:top={(c)?<><b>on</b></>:<><i>off</i></>}></Panel>; }');
+  });
+
+  it('looks through an if with no else, whose missing branch is null', () => {
+    expect(lower('function App() { let c; return <Panel>{(c)?<><b slot="top">on</b></>:null}</Panel>; }'))
+      .toBe('function App() { let c; return <Panel slot:top={(c)?<><b>on</b></>:null}></Panel>; }');
+  });
 });
 
 describe('slot mistakes are compile errors', () => {
@@ -45,6 +57,8 @@ describe('slot mistakes are compile errors', () => {
     ['a marker outside any call', 'function App() { return <div><b slot="top">x</b></div>; }', /direct child/],
     ['elements targeting different slots', 'function App(){ let c; return <Panel>{c ? <b slot="a"/> : <i slot="b"/>}</Panel>; }', /same slot/],
     ['marked and unmarked elements together', 'function App(){ let c; return <Panel>{c ? <b slot="a"/> : <i/>}</Panel>; }', /same slot/],
+    ['if/else branches targeting different slots', 'function App(){ let c; return <Panel>{(c)?<><b slot="a"/></>:<><i slot="b"/></>}</Panel>; }', /same slot/],
+    ['a branch with unmarked text beside its marked element', 'function App(){ let c; return <Panel>{(c)?<><b slot="a"/>loose</>:null}</Panel>; }', /same slot/],
     ['a slot outside a component', 'const view = <div><slot /></div>;', /inside a component/],
     ['an array pattern for props', 'function Panel([first]) { return <div><slot /></div>; }', /name or an object pattern/],
   ])('%s', (_name, source, message) => {

@@ -190,7 +190,10 @@ stage sees ordinary JSX and props, and slot content gets the same tracking, rows
   default parameter is. `{false}` is content that shows nothing; `{undefined}` shows the fallback.
 - A direct child of a component call marked `slot="x"` goes to `slot:x` in authored order and loses
   the marker, a component child included. So does a direct expression child whose elements, through
-  `?:`, `&&`, `||`, `??` and a `.map` callback, are all marked `x`.
+  `?:`, `&&`, `||`, `??`, a `.map` callback and a fragment's children, are all marked `x`. Fragments
+  matter because a `.auwla` `if`/`else` child lowers to `(test)?<>…</>:<>…</>`; before 2026-11-19
+  its marked branches were refused as "not a direct child" (found in Triaxis). Text in such a
+  fragment is unmarked content, so it still fails the same-slot check (`slots/lower.test.ts`).
 - A placeholder written as a direct child of a component call forwards: its `name` reads the
   enclosing component's slot and its `slot` picks the inner component's. Alone in its group it
   passes `undefined` on, so the inner component's fallback shows.
