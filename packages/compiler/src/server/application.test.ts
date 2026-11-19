@@ -214,6 +214,37 @@ export const saveUser = define.function({ async post({ services }, name) { const
     expect(build.client.ok && build.client.output['./src/App.tsx']).toContain('_data.');
   });
 
+  it('keep server-only code that reads shared state plain, with no await boundaries and no runtime', async () => {
+    // Found in Triaxis (2026-11-19): a server module that awaits and reads an array exported by
+    // client code was emitted with `_MD.flushWritesBeforeAwait(...)` around its awaits but without
+    // the runtime import, so the server threw "_MD is not defined" on the first request.
+    const files = {
+      ...FILES,
+      './src/axes.ts': `export const axes = ['forex', 'crypto'];\n`,
+      './server/access.ts': `
+import { axes } from '../src/axes';
+export async function held(session: Promise<string[]>) {
+  const owned = await session;
+  try { return axes.filter((axis) => owned.includes(axis)); } finally { await Promise.resolve(); }
+}
+`,
+      './server/functions/users.ts': `
+import { held } from '../access';
+export const getUser = define.function({ async get({ services }, id: string) { return held(Promise.resolve([id])); } });
+export const saveUser = define.function({ async post({ services }, name) { return { name }; } });
+`,
+    };
+    const build = await createApplication({ client: './src/main.ts', server: SERVER, host: memoryHost(files) }).build();
+    expect(build.server?.ok).toBe(true);
+    if (build.server?.ok !== true) return;
+    const access = build.server.output['./server/access.ts']!;
+    expect(access).not.toMatch(/WritesBeforeAwait|WritesAfterAwait|_restoreBuild/);
+    // Any runtime call left in the module must come with the runtime's import.
+    if (/_MD\./.test(access)) {
+      expect(access).toMatch(/import \* as _MD from/);
+    }
+  });
+
   it('read server code a source language owns like .ts: functions, services and #server/ modules', async () => {
     // `.toy` is TSX after a `// toy` line the author did not write: the TSX's offsets are all
     // one line below the authored ones. The compiler must know no particular language.

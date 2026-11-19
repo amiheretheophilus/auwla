@@ -222,7 +222,12 @@ a server-backed `$routed`. So, in `graph.resolved.serverOnly(module)`'s modules:
 - no source readiness is planned (`features/sources/flow-plan.ts`) unless the module calls
   `$fetch`/`$read`/`$track` or holds markup (a page function, a component declared there);
 - a `try` or `await` adds no build recovery or write flush when the module renders nothing
-  (`core/emit/dom.ts`).
+  (`core/emit/dom.ts`). Both passes follow `guardsWrites`, as the runtime import does. Before
+  2026-11-19 they ran regardless, so a server-only module that awaited and also read state another
+  module exports (which keeps it on the full emit path, for its readers, with no runtime import)
+  got `_MD.flushWritesBeforeAwait(...)` and no `_MD`: the Triaxis server threw "_MD is not
+  defined" on its first member page. `server/application.test.ts` ("keep server-only code that
+  reads shared state plain") covers it.
 
 Pages the server renders keep everything: they are not server-only code. Before (the `.auwla`
 directory example): `server/people.auwla`, a 20-line in-memory store, compiled to 3,338

@@ -19,7 +19,7 @@ import { emitTakeovers } from '../../features/derived/takeover';
 import { emitRecovery } from './recovery';
 import { emitMutations } from '../../features/handlers/mutations';
 import { emitShared } from './shared';
-import { emitAwaitBoundaries } from './await';
+import { emitAwaitBoundaries, plainCopy } from './await';
 import { emitRenderValue } from './render-value';
 import { RowComponents } from './row-list';
 import { emitComponentCall } from '../../features/components/dom';
@@ -246,7 +246,16 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     insertion++;
   }
   output.body.splice(insertion, 0, ...hoisted);
-  const emitted = emitAwaitBoundaries(emitRecovery(output, names, runtime), runtime) as Extract<Node, { type: 'Program' }>;
+  // The `try` and `await` boundaries call the runtime, so they follow `guardsWrites` exactly as
+  // the import does. Server-only code that renders nothing gets neither, even when it reads
+  // shared state, which still brings it here for its readers with no runtime import at all.
+  // Running the passes regardless left `_MD.` calls and no `_MD` (Triaxis, 2026-11-19).
+  let emitted: Extract<Node, { type: 'Program' }>;
+  if (guardsWrites) {
+    emitted = emitAwaitBoundaries(emitRecovery(output, names, runtime), runtime) as Extract<Node, { type: 'Program' }>;
+  } else {
+    emitted = plainCopy(output);
+  }
   // Imports, templates, registrations and module source descriptions belong to the process,
   // never to one render's state. Marked on the final tree: `await.ts` clones it whole, which
   // keeps no origins, but both passes keep its top-level statements in place.

@@ -33,8 +33,11 @@ export function emitAwaitBoundaries(tree: Node, runtime: string): Node {
   return copy(emitted, replacements);
 }
 
-/** A structural copy of plain syntax: every occurrence copied apart, no origins kept. */
-function plainCopy<T>(value: T): T {
+/**
+ * A structural copy of plain syntax: every occurrence copied apart, no origins kept. It is the
+ * final tree for a module with no boundaries to emit (`emitDom` when nothing guards writes).
+ */
+export function plainCopy<T>(value: T): T {
   if (value === null || typeof value !== 'object') {
     return value;
   }
