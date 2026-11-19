@@ -1,0 +1,87 @@
+import type { Member } from '../membership';
+import { Wordmark } from '../../brand/Wordmark.auwla';
+import { StaffBadge } from '../../desk/StaffBadge.auwla';
+
+<style>
+  .member-header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 3.65rem;
+    padding-inline: var(--desk-gutter);
+    border-bottom: 1px solid var(--desk-rule);
+    background: #f1ebe1e6;
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    backdrop-filter: blur(14px) saturate(1.4);
+  }
+
+  .member-header nav {
+    display: flex;
+    align-items: center;
+    gap: clamp(.75rem, 2vw, 1.5rem);
+    font-size: .875rem;
+  }
+
+  .member-header form {
+    margin: 0;
+  }
+
+  .nav-link {
+    color: var(--desk-muted);
+    text-decoration: none;
+    transition: color .2s ease;
+  }
+
+  .nav-link:hover {
+    color: var(--desk-ink);
+  }
+
+  .nav-link:focus-visible {
+    outline: 2px solid var(--desk-ink);
+    outline-offset: 3px;
+  }
+
+  .identity {
+    padding-left: clamp(.75rem, 2vw, 1.5rem);
+    border-left: 1px solid var(--desk-rule);
+  }
+
+  @media (max-width: 40rem) {
+    .nav-link {
+      display: none;
+    }
+  }
+</style>
+
+/** The member area's header: the member and their pages, or sign-in links for a visitor. */
+export function MemberHeader({ member }: { member: Member | null }) {
+  return (
+    <header class="member-header">
+      if (member) {
+        <Wordmark href="/" label="Triaxis home" area="Members" />
+      } else {
+        <Wordmark href="/" label="Triaxis home" />
+      }
+      <nav aria-label="Member navigation">
+        if (member) {
+          <a class="nav-link" route-to="/app">"Signals"</a>
+          <a class="nav-link" route-to="/app/subscribe">"Plans"</a>
+          if (member.staff) {
+            <a class="nav-link" href="/desk">"Desk"</a>
+          }
+          <span class="identity"><StaffBadge member={{ id: member.id, name: member.name, role: 'analyst' }} /></span>
+          <form method="post" action="/sign-out">
+            <button class="desk-button desk-button--quiet" type="submit">"Sign out"</button>
+          </form>
+        } else {
+          <a class="nav-link" route-to="/sign-in">"Sign in"</a>
+          <a class="desk-button desk-button--quiet" route-to="/sign-up">"Subscribe"</a>
+        }
+      </nav>
+    </header>
+  );
+}

@@ -1,0 +1,65 @@
+<style>
+  .auth-form {
+    display: grid;
+    gap: 1.1rem;
+    width: min(100%, 24rem);
+  }
+
+  .auth-form .desk-button {
+    width: 100%;
+    margin-top: .35rem;
+  }
+
+  .error {
+    margin: 0;
+    padding: .75rem .9rem;
+    border-left: 2px solid var(--desk-accent);
+    background: var(--desk-paper);
+    color: var(--desk-accent);
+    font-size: .875rem;
+    line-height: 1.45;
+  }
+
+  .switch {
+    margin: 0;
+    color: var(--desk-muted);
+    font-size: .875rem;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .error {
+      animation: tx-rise .45s var(--desk-ease) both;
+    }
+  }
+</style>
+
+interface AuthFormProps {
+  submit: (event: SubmitEvent) => void;
+  pending: boolean;
+  action: string;
+  pendingAction: string;
+  error: string;
+}
+
+/**
+ * The frame both member forms share: their fields in the default slot, then the submit
+ * button, the error and the link to the other form (the `switch` slot).
+ */
+export function AuthForm({ submit, pending, action, pendingAction, error }: AuthFormProps) {
+  return (
+    <form class="auth-form" method="post" onSubmit={submit}>
+      <slot />
+      <button class="desk-button" type="submit" disabled={pending}>
+        if (pending) {
+          pendingAction
+        } else {
+          action
+        }
+      </button>
+      if (error) {
+        <p class="error" role="alert">error</p>
+      }
+      <p class="switch"><slot name="switch" /></p>
+    </form>
+  );
+}

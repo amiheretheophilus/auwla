@@ -1,6 +1,8 @@
 import { redirectRoute } from '@memoized-dom/router';
 import { authConfigured, getAnalyst } from '#server/auth/auth';
 import { listAnalyses, listAuthors, loadAnalysis } from '#server/desk/analyses';
+import { listPaymentsForReview } from '#server/members/payments';
+import { PaymentsBoard } from './payments/PaymentsBoard.auwla';
 import { SignInPage } from './auth/SignInPage.auwla';
 import { AnalysesBoard } from './board/AnalysesBoard.auwla';
 import { AnalysisEditor } from './draft/AnalysisEditor.auwla';
@@ -61,6 +63,22 @@ export function AnalysisPage() {
           <a class="desk-button desk-button--quiet" route-to="/desk">"Back to all analyses"</a>
         </div>
       }
+    </DeskShell>
+  );
+}
+
+/** `/desk/payments`: admins only. An analyst is sent back to the analyses. */
+export function PaymentsPage() {
+  const page = $routed(async ({ request }) => {
+    const staff = await getAnalyst(request);
+    if (!staff) return redirectRoute('/desk/sign-in');
+    if (staff.role !== 'admin') return redirectRoute('/desk');
+    return { staff, payments: listPaymentsForReview() };
+  });
+
+  return (
+    <DeskShell staff={page.staff}>
+      <PaymentsBoard staff={page.staff} initial={page.payments} />
     </DeskShell>
   );
 }

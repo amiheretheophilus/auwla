@@ -1,0 +1,90 @@
+<style>
+  .wordmark {
+    display: inline-flex;
+    align-items: center;
+    gap: .6rem;
+    color: inherit;
+    font-size: 1.125rem;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-decoration: none;
+    text-transform: uppercase;
+  }
+
+  .wordmark:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 4px;
+  }
+
+  .wordmark small {
+    padding-left: .65rem;
+    border-left: 1px solid #d5cabe;
+    color: #625850;
+    font-size: .8rem;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  /* Three bars crossing, one per axis. They turn on hover. */
+  .mark {
+    position: relative;
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+
+  .mark span {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    border-radius: 1px;
+    background: currentColor;
+    transition: rotate .5s cubic-bezier(.16, 1, .3, 1);
+  }
+
+  .mark span:nth-child(1) {
+    background: #a8271c;
+    rotate: 60deg;
+  }
+
+  .mark span:nth-child(2) {
+    rotate: -60deg;
+  }
+
+  .wordmark:hover .mark span:nth-child(1) {
+    rotate: 120deg;
+  }
+
+  .wordmark:hover .mark span:nth-child(2) {
+    rotate: 0deg;
+  }
+
+  .wordmark:hover .mark span:nth-child(3) {
+    rotate: 60deg;
+  }
+
+  @media (max-width: 40rem) {
+    .wordmark small {
+      display: none;
+    }
+  }
+</style>
+
+/** The Triaxis mark and name, linking to `href`, with an optional area name such as "Desk". */
+export function Wordmark({ href, label, area = '' }: { href: string; label: string; area?: string }) {
+  return (
+    <a class="wordmark" href={href} aria-label={label}>
+      <span class="mark" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </span>
+      "Triaxis"
+      if (area) {
+        <small>area</small>
+      }
+    </a>
+  );
+}

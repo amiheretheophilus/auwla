@@ -34,8 +34,13 @@ function createAuth() {
     database: deskDatabase(),
     emailAndPassword: {
       enabled: true,
-      disableSignUp: true,
+      // Members sign up through `registerMember` (server/auth/routes.ts); the public
+      // /api/auth route forwards only sign-in and sign-out. New accounts take the plain
+      // `user` role, so a sign-up can never reach the desk.
+      disableSignUp: false,
       minPasswordLength: 12,
+      // Off while testing, at the owner's request. Turn on together with an email sender.
+      requireEmailVerification: false,
     },
     session: {
       expiresIn: 4 * 60 * 60,

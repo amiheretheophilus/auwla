@@ -1,0 +1,327 @@
+import { decideMemberPayment } from '#server-functions';
+import type { StaffMember } from '../analysis';
+import { StaffBadge } from '../StaffBadge.auwla';
+import { formatDay, paymentStatusLabels, type PaymentForReview, type PaymentStatus } from '../../members/membership';
+import { axisLabel, monthsText, paymentMethodLabel } from '../../members/plans';
+
+<style>
+  .title {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: end;
+    gap: 1rem 2rem;
+    margin-bottom: clamp(1.5rem, 3vw, 2.25rem);
+  }
+
+  .kicker {
+    margin: 0 0 .75rem;
+    color: var(--desk-accent);
+    font-weight: 500;
+  }
+
+  .title h1 {
+    margin: 0;
+    font-size: clamp(2.6rem, 6vw, 5.5rem);
+    font-weight: 400;
+    line-height: .92;
+    letter-spacing: -.07em;
+  }
+
+  .title p {
+    max-width: 34ch;
+    margin: 0;
+    color: var(--desk-muted);
+    font-size: .875rem;
+    line-height: 1.5;
+  }
+
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    margin: 0 0 .5rem;
+    padding: 0;
+    border-bottom: 1px solid var(--desk-rule);
+    list-style: none;
+  }
+
+  .tab {
+    position: relative;
+    display: inline-flex;
+    align-items: baseline;
+    gap: .45rem;
+    padding: .8rem 0 .9rem;
+    margin-right: 1.4rem;
+    border: 0;
+    background: none;
+    color: var(--desk-muted);
+    font: inherit;
+    font-size: .92rem;
+    cursor: pointer;
+  }
+
+  .tab::after {
+    position: absolute;
+    right: 0;
+    bottom: -1px;
+    left: 0;
+    height: 2px;
+    background: var(--desk-ink);
+    content: "";
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform .4s var(--desk-ease);
+  }
+
+  .tab[aria-pressed="true"] {
+    color: var(--desk-ink);
+  }
+
+  .tab[aria-pressed="true"]::after {
+    transform: scaleX(1);
+  }
+
+  .tab small {
+    font-family: var(--desk-mono);
+    font-size: .72rem;
+  }
+
+  .tab:focus-visible {
+    outline: 2px solid var(--desk-ink);
+    outline-offset: 2px;
+  }
+
+  .list {
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--desk-ink);
+    list-style: none;
+  }
+
+  .payment {
+    display: grid;
+    grid-template-columns: minmax(12rem, 1.2fr) minmax(0, 1.4fr) minmax(9rem, .8fr) auto;
+    align-items: center;
+    gap: 1rem 1.5rem;
+    padding: 1.1rem .25rem;
+    border-bottom: 1px solid var(--desk-rule);
+  }
+
+  .who {
+    display: grid;
+    gap: .3rem;
+    min-width: 0;
+  }
+
+  .who span {
+    overflow: hidden;
+    color: var(--desk-muted);
+    font-size: .78rem;
+    text-overflow: ellipsis;
+  }
+
+  .what {
+    display: grid;
+    gap: .3rem;
+    font-size: .9rem;
+  }
+
+  .what strong {
+    font-size: 1.05rem;
+    font-weight: 500;
+  }
+
+  .what code {
+    color: var(--desk-ink);
+    font-family: var(--desk-mono);
+    font-size: .8rem;
+    overflow-wrap: anywhere;
+  }
+
+  .when {
+    color: var(--desk-muted);
+    font-family: var(--desk-mono);
+    font-size: .72rem;
+    line-height: 1.6;
+  }
+
+  .decide {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: .5rem;
+  }
+
+  .reject {
+    min-height: 2.3rem;
+    padding: .45rem .95rem;
+    border: 1px solid var(--desk-rule);
+    border-radius: 999px;
+    background: none;
+    color: var(--desk-accent);
+    font: inherit;
+    font-size: .85rem;
+    cursor: pointer;
+    transition: border-color .2s ease;
+  }
+
+  .reject:hover {
+    border-color: var(--desk-accent);
+  }
+
+  .reject:disabled {
+    opacity: .5;
+    cursor: wait;
+  }
+
+  .reject:focus-visible {
+    outline: 2px solid var(--desk-ink);
+    outline-offset: 2px;
+  }
+
+  .decided {
+    justify-self: end;
+    font-size: .85rem;
+    text-align: right;
+  }
+
+  .decided[data-status="approved"] { color: var(--desk-pass); }
+  .decided[data-status="rejected"] { color: var(--desk-accent); }
+
+  .decided span {
+    display: block;
+    color: var(--desk-muted);
+    font-size: .72rem;
+  }
+
+  .message {
+    margin: 0 0 1rem;
+    padding: .75rem .9rem;
+    border-left: 2px solid var(--desk-accent);
+    background: var(--desk-surface);
+    color: var(--desk-accent);
+    font-size: .875rem;
+  }
+
+  .empty {
+    padding: 2.5rem 0;
+    color: var(--desk-muted);
+  }
+
+  @media (max-width: 52rem) {
+    .payment {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .decide,
+    .decided {
+      justify-content: flex-start;
+      justify-self: start;
+      text-align: left;
+    }
+  }
+</style>
+
+const filters: (PaymentStatus | 'all')[] = ['pending', 'approved', 'rejected', 'all'];
+
+function filterLabel(filter: PaymentStatus | 'all'): string {
+  if (filter === 'all') {
+    return 'All';
+  }
+  if (filter === 'pending') {
+    return 'Waiting';
+  }
+  return paymentStatusLabels[filter];
+}
+
+/** `/desk/payments`: admins approve or reject what members say they paid. */
+export function PaymentsBoard({ staff, initial }: { staff: StaffMember; initial: PaymentForReview[] }) {
+  let payments = initial;
+  let filter: PaymentStatus | 'all' = 'pending';
+  let busyId = 0;
+  let message = '';
+
+  const visible = payments.filter(payment => filter === 'all' || payment.status === filter);
+  const countOf = (value: PaymentStatus | 'all') => payments.filter(payment => value === 'all' || payment.status === value).length;
+
+  async function decide(id: number, decision: 'approved' | 'rejected') {
+    // A second click lands before the buttons redraw as disabled; the first one is enough.
+    // The server decides a payment once either way.
+    if (busyId !== 0) {
+      return;
+    }
+    busyId = id;
+    message = '';
+    const outcome = await decideMemberPayment(id, decision);
+    busyId = 0;
+    if (!outcome.ok) {
+      message = outcome.message;
+      return;
+    }
+    const decidedAt = new Date().toISOString();
+    payments = payments.map(payment => {
+      if (payment.id !== id) {
+        return payment;
+      }
+      return { ...payment, status: decision, decidedAt, decidedBy: staff.name };
+    });
+  }
+
+  return (
+    <section aria-labelledby="payments-heading">
+      <div class="title">
+        <div>
+          <p class="kicker">"Members"</p>
+          <h1 id="payments-heading">"Payments"</h1>
+        </div>
+        <p>"Check each reference against the bank, mobile money or USDT records before approving. Approving opens the plan's axes at once."</p>
+      </div>
+
+      <ul class="tabs" aria-label="Status">
+        for (const value of filters) {
+          <li key={value}>
+            <button class="tab" type="button" aria-pressed={filter === value} onClick={() => filter = value}>
+              filterLabel(value) <small>countOf(value)</small>
+            </button>
+          </li>
+        }
+      </ul>
+
+      if (message) {
+        <p class="message" role="alert">message</p>
+      }
+
+      if (visible.length === 0) {
+        <p class="empty">"Nothing here."</p>
+      } else {
+        <ul class="list" aria-label="Payments">
+          for (const payment of visible) {
+            <li key={payment.id} class="payment">
+              <div class="who">
+                <StaffBadge member={{ id: payment.member.id, name: payment.member.name, role: 'analyst' }} />
+                <span>payment.member.email</span>
+              </div>
+              <div class="what">
+                <strong>"$" + payment.amount + " · " + payment.axes.map(axisLabel).join(', ')</strong>
+                <span>monthsText(payment.months) + " · " + paymentMethodLabel(payment.method)</span>
+                <code>payment.reference</code>
+              </div>
+              <div class="when">"Sent " + formatDay(payment.createdAt)</div>
+              if (payment.status === 'pending') {
+                <div class="decide">
+                  <button class="reject" type="button" disabled={busyId === payment.id} onClick={() => decide(payment.id, 'rejected')}>"Reject"</button>
+                  <button class="desk-button" type="button" disabled={busyId === payment.id} onClick={() => decide(payment.id, 'approved')}>"Approve"</button>
+                </div>
+              } else {
+                <p class="decided" data-status={payment.status}>
+                  paymentStatusLabels[payment.status]
+                  <span>"by " + (payment.decidedBy ?? 'staff') + " · " + formatDay(payment.decidedAt ?? payment.createdAt)</span>
+                </p>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  );
+}

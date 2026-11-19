@@ -1,0 +1,95 @@
+import { redirectRoute } from '@memoized-dom/router';
+import { accessFor, getMember, signalsFor } from '#server/members/access';
+import { listMemberPayments, paymentInstructions } from '#server/members/payments';
+import { AuthSplit } from '../auth/AuthSplit.auwla';
+import { plansOnSale } from './plans';
+import { MemberSignInForm, MemberSignUpForm } from './auth/MemberAuthForms.auwla';
+import { MemberDashboard } from './home/MemberDashboard.auwla';
+import { MemberHeader } from './layout/MemberHeader.auwla';
+import { MemberShell } from './layout/MemberShell.auwla';
+import { SubscribePage } from './subscribe/SubscribePage.auwla';
+
+/** `/sign-in`. A member who is already signed in goes straight to their signals. */
+export function MemberSignIn() {
+  const ready = $routed(async ({ request }) => {
+    if (await getMember(request)) return redirectRoute('/app');
+    return true;
+  });
+
+  return (
+    <AuthSplit
+      first="Welcome"
+      second="back"
+      lede="Forex, crypto and synthetics signals, checked before they reach you."
+      title="Sign in"
+      text="Use the email and password you signed up with.">
+      <MemberHeader slot="header" member={null} />
+      if (ready) {
+        <MemberSignInForm />
+      }
+    </AuthSplit>
+  );
+}
+
+/** `/sign-up`: a new member account, then the plans. */
+export function MemberSignUp() {
+  const ready = $routed(async ({ request }) => {
+    if (await getMember(request)) return redirectRoute('/app');
+    return true;
+  });
+
+  return (
+    <AuthSplit
+      first="Join"
+      second="Triaxis"
+      lede="One axis or all three. Every signal passes its checks before it reaches you."
+      title="Create your account"
+      text="Then pick a plan. Your signals open as soon as your payment is approved.">
+      <MemberHeader slot="header" member={null} />
+      if (ready) {
+        <MemberSignUpForm />
+      }
+    </AuthSplit>
+  );
+}
+
+/** `/app`: the member's axes and the signals on the ones they hold. */
+export function MemberApp() {
+  const home = $routed(async ({ request }) => {
+    const signedIn = await getMember(request);
+    if (!signedIn) return redirectRoute('/sign-in');
+    const access = accessFor(signedIn);
+    return {
+      member: signedIn.member,
+      access,
+      payments: listMemberPayments(signedIn.member.id),
+      signals: signalsFor(access),
+    };
+  });
+
+  return (
+    <MemberShell member={home.member}>
+      <MemberDashboard home={home} />
+    </MemberShell>
+  );
+}
+
+/** `/app/subscribe`: pick a plan, pay, and submit the reference. */
+export function MemberSubscribe() {
+  const page = $routed(async ({ request }) => {
+    const signedIn = await getMember(request);
+    if (!signedIn) return redirectRoute('/sign-in');
+    return {
+      member: signedIn.member,
+      access: accessFor(signedIn),
+      payments: listMemberPayments(signedIn.member.id),
+      instructions: paymentInstructions(),
+    };
+  });
+
+  return (
+    <MemberShell member={page.member}>
+      <SubscribePage plans={plansOnSale()} access={page.access} instructions={page.instructions} payments={page.payments} />
+    </MemberShell>
+  );
+}

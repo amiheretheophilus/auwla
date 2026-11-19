@@ -1,0 +1,392 @@
+import { formatDay, paymentStatusLabels, type AxisAccess, type MemberHome } from '../membership';
+import { axisLabel, findPlan, planLength, planTitle } from '../plans';
+import { formatSignalTime, levelsText, postedReview, type PublishedSignal } from '../../signals/signal-card';
+import { SignalCardPreview } from '../../signals/SignalCardPreview.auwla';
+
+<style>
+  .title {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: end;
+    gap: 1rem 2rem;
+    margin-bottom: clamp(1.5rem, 3vw, 2.25rem);
+  }
+
+  .title .kicker {
+    margin: 0 0 .75rem;
+    color: var(--desk-accent);
+    font-weight: 500;
+  }
+
+  .title h1 {
+    margin: 0;
+    font-size: clamp(2.4rem, 5.5vw, 5rem);
+    font-weight: 400;
+    line-height: .92;
+    letter-spacing: -.07em;
+  }
+
+  .title p {
+    max-width: 34ch;
+    margin: 0;
+    color: var(--desk-muted);
+    font-size: .875rem;
+    line-height: 1.5;
+  }
+
+  /* The three axes, held or locked, in ruled columns like the public page. */
+  .axes {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin: 0 0 1.5rem;
+    padding: 0;
+    border-block: 1px solid var(--desk-ink);
+    list-style: none;
+  }
+
+  .axis {
+    display: grid;
+    align-content: start;
+    gap: .55rem;
+    padding: 1.25rem clamp(1rem, 2.5vw, 2rem);
+    border-left: 1px solid var(--desk-rule);
+  }
+
+  .axis:first-child {
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  .axis[data-axis="forex"] { --axis-color: #3987e5; }
+  .axis[data-axis="crypto"] { --axis-color: #9085e9; }
+  .axis[data-axis="synthetics"] { --axis-color: #eda100; }
+
+  .axis h2 {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    margin: 0;
+    font-size: clamp(1.4rem, 2.4vw, 2rem);
+    font-weight: 400;
+    letter-spacing: -.045em;
+  }
+
+  .axis h2::before {
+    width: .55rem;
+    height: .55rem;
+    border-radius: 50%;
+    background: var(--axis-color);
+    content: "";
+  }
+
+  .axis p {
+    margin: 0;
+    color: var(--desk-muted);
+    font-size: .85rem;
+  }
+
+  .axis[data-active="true"] p {
+    color: var(--desk-pass);
+  }
+
+  .axis .desk-button {
+    justify-self: start;
+    margin-top: .35rem;
+  }
+
+  .notice {
+    margin: 0 0 1.5rem;
+    padding: .85rem 1rem;
+    border-left: 2px solid #c98a00;
+    background: var(--desk-surface);
+    font-size: .875rem;
+    line-height: 1.45;
+  }
+
+  .notice[data-status="rejected"] {
+    border-left-color: var(--desk-accent);
+  }
+
+  /* The feed. */
+  .feed-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: .75rem 1.5rem;
+    margin: 2rem 0 0;
+    border-bottom: 1px solid var(--desk-rule);
+  }
+
+  .feed-head h2 {
+    margin: 0;
+    padding-bottom: .8rem;
+    font-size: 1.35rem;
+    font-weight: 400;
+    letter-spacing: -.035em;
+  }
+
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .tab {
+    position: relative;
+    padding: .7rem 0 .8rem;
+    margin-left: 1.1rem;
+    border: 0;
+    background: none;
+    color: var(--desk-muted);
+    font: inherit;
+    font-size: .9rem;
+    cursor: pointer;
+  }
+
+  .tab::after {
+    position: absolute;
+    right: 0;
+    bottom: -1px;
+    left: 0;
+    height: 2px;
+    background: var(--desk-ink);
+    content: "";
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform .4s var(--desk-ease);
+  }
+
+  .tab[aria-pressed="true"] {
+    color: var(--desk-ink);
+  }
+
+  .tab[aria-pressed="true"]::after {
+    transform: scaleX(1);
+  }
+
+  .tab:focus-visible {
+    outline: 2px solid var(--desk-ink);
+    outline-offset: 2px;
+  }
+
+  .feed {
+    display: grid;
+    gap: 0;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .entry {
+    display: grid;
+    grid-template-columns: minmax(16rem, 24rem) minmax(0, 1fr);
+    gap: clamp(1.25rem, 3vw, 2.5rem);
+    padding: 1.75rem 0;
+    border-bottom: 1px solid var(--desk-rule);
+  }
+
+  .levels {
+    display: grid;
+    align-content: start;
+    gap: .9rem;
+  }
+
+  .levels h3 {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 500;
+    letter-spacing: -.02em;
+  }
+
+  .levels time {
+    color: var(--desk-muted);
+    font-family: var(--desk-mono);
+    font-size: .75rem;
+  }
+
+  .levels pre {
+    margin: 0;
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--desk-rule);
+    border-radius: 2px;
+    background: var(--desk-input);
+    font-family: var(--desk-mono);
+    font-size: .88rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+
+  .levels .desk-button {
+    justify-self: start;
+  }
+
+  .empty {
+    display: grid;
+    justify-items: start;
+    gap: .9rem;
+    padding: 2.5rem 0;
+  }
+
+  .empty h3 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 400;
+    letter-spacing: -.04em;
+  }
+
+  .empty p {
+    max-width: 44ch;
+    margin: 0;
+    color: var(--desk-muted);
+    line-height: 1.5;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .axis,
+    .entry {
+      animation: tx-rise .6s var(--desk-ease) both;
+    }
+
+    .axis:nth-child(2) { animation-delay: .06s; }
+    .axis:nth-child(3) { animation-delay: .12s; }
+  }
+
+  @media (max-width: 52rem) {
+    .axes {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .axis {
+      padding: 1rem 0;
+      border-left: 0;
+    }
+
+    .axis + .axis {
+      border-top: 1px solid var(--desk-rule);
+    }
+
+    .entry {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>
+
+/** "Active until 18 Dec 2026", "Lifetime access" or "Locked". */
+function accessLine(entry: AxisAccess): string {
+  if (!entry.active) {
+    return 'Locked';
+  }
+  if (entry.expiresAt === null) {
+    return 'Lifetime access';
+  }
+  return 'Active until ' + formatDay(entry.expiresAt);
+}
+
+/** "One axis · 1 month (Forex)" for a payment's plan. */
+function paymentPlanLabel(planId: string, axes: string[]): string {
+  const plan = findPlan(planId);
+  const covered = axes.map(axisLabel).join(', ');
+  if (!plan) {
+    return covered;
+  }
+  return `${planTitle(plan)} · ${planLength(plan)} (${covered})`;
+}
+
+export function MemberDashboard({ home }: { home: MemberHome }) {
+  let axisFilter = 'all';
+  let copiedId = '';
+
+  const held = home.access.filter(entry => entry.active);
+  const firstName = home.member.name.split(' ')[0] ?? home.member.name;
+  const visible = home.signals.filter(signal => axisFilter === 'all' || signal.card.axis === axisFilter);
+  const latestPayment = home.payments.find(payment => payment.status !== 'approved');
+
+  function copyLevels(signal: PublishedSignal) {
+    void navigator.clipboard?.writeText(levelsText(signal.card)).then(() => {
+      copiedId = signal.id;
+    });
+  }
+
+  return (
+    <section aria-labelledby="home-heading">
+      <div class="title">
+        <div>
+          <p class="kicker">"Your signals"</p>
+          <h1 id="home-heading">"Welcome, " + firstName</h1>
+        </div>
+        <p>"Signals appear here for the axes you hold. A locked axis stays visible, ready to add."</p>
+      </div>
+
+      <ul class="axes" aria-label="Your axes">
+        for (const entry of home.access) {
+          <li key={entry.axis} class="axis" data-axis={entry.axis} data-active={String(entry.active)}>
+            <h2>entry.label</h2>
+            <p>accessLine(entry)</p>
+            if (!entry.active) {
+              <a class="desk-button desk-button--quiet" route-to="/app/subscribe">"Subscribe"</a>
+            }
+          </li>
+        }
+      </ul>
+
+      if (latestPayment && latestPayment.status === 'pending') {
+        <p class="notice" data-status="pending">"Your payment for " + paymentPlanLabel(latestPayment.planId, latestPayment.axes) + " (reference " + latestPayment.reference + ") is " + paymentStatusLabels.pending.toLowerCase() + ". Access starts when an admin approves it."</p>
+      } else if (latestPayment && latestPayment.status === 'rejected') {
+        <p class="notice" data-status="rejected">"Your payment " + latestPayment.reference + " was not approved. Check the reference and submit it again, or contact Triaxis."</p>
+      }
+
+      <div class="feed-head">
+        <h2>"Signal feed"</h2>
+        if (held.length > 1) {
+          <ul class="tabs" aria-label="Filter by axis">
+            <li><button class="tab" type="button" aria-pressed={axisFilter === 'all'} onClick={() => axisFilter = 'all'}>"All"</button></li>
+            for (const entry of held) {
+              <li key={entry.axis}>
+                <button class="tab" type="button" aria-pressed={axisFilter === entry.axis} onClick={() => axisFilter = entry.axis}>entry.label</button>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+
+      if (held.length === 0) {
+        <div class="empty">
+          <h3>"No axes yet"</h3>
+          <p>"Subscribe to one axis or all three to see their signals here as soon as they are posted."</p>
+          <a class="desk-button" route-to="/app/subscribe">"See plans"</a>
+        </div>
+      } else if (visible.length === 0) {
+        <div class="empty">
+          <h3>"No signals yet"</h3>
+          <p>"New signals on your axes appear here as soon as an analyst posts them."</p>
+        </div>
+      } else {
+        <ul class="feed" aria-label="Signals">
+          for (const signal of visible) {
+            <li key={signal.id} class="entry">
+              <SignalCardPreview card={signal.card} review={postedReview} signalId={signal.id} publishedAt={signal.publishedAt} />
+              <div class="levels">
+                <div>
+                  <h3>signal.card.symbol + " · " + signal.card.direction</h3>
+                  <time datetime={signal.publishedAt}>signal.id + " · " + formatSignalTime(signal.publishedAt)</time>
+                </div>
+                <pre aria-label={'Levels for ' + signal.id}>levelsText(signal.card)</pre>
+                <button class="desk-button desk-button--quiet" type="button" onClick={() => copyLevels(signal)}>
+                  if (copiedId === signal.id) {
+                    "Copied"
+                  } else {
+                    "Copy levels"
+                  }
+                </button>
+              </div>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  );
+}

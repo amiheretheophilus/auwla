@@ -44,7 +44,19 @@ Post stays disabled until the saved version passes every check and there are no 
 
 Auth and analyses use Bun SQLite at `.local/analyst.sqlite`. Set `TRIAXIS_DESK_DB` to use a different server-side path outside `public/`. The Neon connection backs `/readyz`.
 
-Desk components are grouped under `src/desk/auth`, `src/desk/layout`, `src/desk/board` (the list), and `src/desk/draft` (the editor, its fields and the check rules). Server code is in `server/desk/analyses.ts` and `server/functions/desk.ts`.
+Desk components are grouped under `src/desk/auth`, `src/desk/layout`, `src/desk/board` (the list), `src/desk/draft` (the editor, its fields and the check rules) and `src/desk/payments`. Server code is in `server/desk/analyses.ts` and `server/functions/desk.ts`.
+
+## Members
+
+Visitors create an account at `/sign-up` and sign in at `/sign-in`. New accounts get the plain `user` role, so they can never open the desk, and the staff sign-in at `/desk/sign-in` refuses them. **Email verification is off while testing** (`requireEmailVerification: false` in `server/auth/auth.ts`); turn it on together with an email sender. Staff can sign in on the member pages too.
+
+`/app/subscribe` sells the plans in `src/members/plans.ts`. Only the two prices the owner has given are on sale: one axis for 1 month ($35) and all three axes for 3 months ($100). The other lengths are listed without a price and stay hidden until the owner sets them. The member picks a plan (and an axis for a single-axis plan), pays by bank, mobile money or USDT using the details in `TRIAXIS_PAY_BANK`, `TRIAXIS_PAY_MOBILE_MONEY` and `TRIAXIS_PAY_USDT`, and submits the payment reference. A member can have three payments waiting at once.
+
+An admin approves or rejects each payment at `/desk/payments`. A payment is decided once; approving it adds the plan's months to each axis it covers, starting where the member's current access ends, so a renewal adds time on top. Admins hold every axis for life.
+
+`/app` shows the member's axes, held or locked, any payment waiting, and the posted signals on the axes they hold, newest first, with the levels as copyable text. Which signals a member may see is decided on the server (`server/members/access.ts`); a locked axis sends none of its signals to the page. Member code is in `src/members` and `server/members`; the server functions are in `server/functions/members.ts`.
+
+Not built yet: expiry reminders, revoking access, upgrade pricing, Google and phone sign-in, and referral codes.
 
 ## Add a feature
 

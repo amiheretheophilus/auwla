@@ -1,0 +1,406 @@
+import { claimPayment } from '#server-functions';
+import { formatDay, paymentStatusLabels, type AxisAccess, type PaymentSummary } from '../membership';
+import { axisLabel, findPlan, monthsText, paymentMethodLabel, planLength, planTitle, type Plan } from '../plans';
+
+<style>
+  .title {
+    margin-bottom: clamp(1.5rem, 3vw, 2.25rem);
+  }
+
+  .title .kicker {
+    margin: 0 0 .75rem;
+    color: var(--desk-accent);
+    font-weight: 500;
+  }
+
+  .title h1 {
+    margin: 0 0 .75rem;
+    font-size: clamp(2.4rem, 5.5vw, 5rem);
+    font-weight: 400;
+    line-height: .92;
+    letter-spacing: -.07em;
+  }
+
+  .title p {
+    max-width: 52ch;
+    margin: 0;
+    color: var(--desk-muted);
+    line-height: 1.5;
+  }
+
+  .steps {
+    counter-reset: desk-section;
+  }
+
+  .choices {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: .75rem;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  /* A choice is a whole ruled box; the radio inside it is the real control. */
+  .choice {
+    position: relative;
+    display: grid;
+    gap: .35rem;
+    padding: 1.1rem 1.2rem;
+    border: 1px solid var(--desk-rule);
+    border-radius: 2px;
+    background: var(--desk-input);
+    cursor: pointer;
+    transition: border-color .2s ease, box-shadow .2s ease;
+  }
+
+  .choice:hover {
+    border-color: #b3a697;
+  }
+
+  .choice:has(input:checked) {
+    border-color: var(--desk-ink);
+    box-shadow: inset 0 0 0 1px var(--desk-ink);
+  }
+
+  .choice:has(input:focus-visible) {
+    outline: 2px solid var(--desk-ink);
+    outline-offset: 2px;
+  }
+
+  .choice input {
+    position: absolute;
+    top: 1.1rem;
+    right: 1.1rem;
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    accent-color: var(--desk-ink);
+  }
+
+  .choice strong {
+    font-size: 1.05rem;
+    font-weight: 500;
+    letter-spacing: -.02em;
+  }
+
+  .choice span {
+    color: var(--desk-muted);
+    font-size: .82rem;
+  }
+
+  .price {
+    margin-top: .4rem;
+    font-size: 1.9rem;
+    letter-spacing: -.05em;
+  }
+
+  .price small {
+    color: var(--desk-muted);
+    font-size: .85rem;
+    letter-spacing: 0;
+  }
+
+  .more {
+    margin: .9rem 0 0;
+    color: var(--desk-muted);
+    font-size: .82rem;
+  }
+
+  .details {
+    margin: 1rem 0 0;
+    padding: 1rem 1.1rem;
+    border-left: 2px solid var(--desk-ink);
+    background: var(--desk-surface);
+    font-size: .9rem;
+    line-height: 1.5;
+    white-space: pre-line;
+  }
+
+  .details strong {
+    display: block;
+    margin-bottom: .3rem;
+    font-weight: 500;
+  }
+
+  .details[data-missing="true"] {
+    border-left-color: #c98a00;
+    color: var(--desk-muted);
+  }
+
+  .reference {
+    display: grid;
+    gap: .9rem;
+    max-width: 30rem;
+  }
+
+  .summary {
+    margin: 0;
+    font-size: .95rem;
+  }
+
+  .summary strong {
+    font-weight: 600;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .75rem 1.25rem;
+    padding: 1.25rem 0;
+    border-top: 1px solid var(--desk-ink);
+  }
+
+  .actions p {
+    margin: 0;
+    font-size: .875rem;
+  }
+
+  .actions p[role="alert"] {
+    color: var(--desk-accent);
+  }
+
+  .done {
+    display: grid;
+    justify-items: start;
+    gap: .75rem;
+    padding: 1.5rem 1.25rem;
+    border-left: 2px solid var(--desk-pass);
+    background: var(--desk-surface);
+  }
+
+  .done h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 400;
+    letter-spacing: -.04em;
+  }
+
+  .done p {
+    margin: 0;
+    color: var(--desk-muted);
+    line-height: 1.5;
+  }
+
+  .history {
+    margin-top: 2.5rem;
+  }
+
+  .history h2 {
+    margin: 0 0 .5rem;
+    font-size: 1.15rem;
+    font-weight: 500;
+  }
+
+  .history ul {
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--desk-rule);
+    list-style: none;
+  }
+
+  .history li {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+    gap: 1rem;
+    padding: .8rem 0;
+    border-bottom: 1px solid var(--desk-rule);
+    font-size: .875rem;
+  }
+
+  .history li span:last-child {
+    color: var(--desk-muted);
+    font-family: var(--desk-mono);
+    font-size: .75rem;
+  }
+
+  .history [data-status="approved"] { color: var(--desk-pass); }
+  .history [data-status="rejected"] { color: var(--desk-accent); }
+  .history [data-status="pending"] { color: #9a6a00; }
+
+  @media (max-width: 36rem) {
+    .history li {
+      grid-template-columns: minmax(0, 1fr);
+      gap: .2rem;
+    }
+  }
+</style>
+
+interface Instruction {
+  method: string;
+  label: string;
+  details: string | null;
+}
+
+interface SubscribeProps {
+  plans: Plan[];
+  access: AxisAccess[];
+  instructions: Instruction[];
+  payments: PaymentSummary[];
+}
+
+/** "Active until 18 Dec 2026. A new payment adds time on top." for an axis already held. */
+function heldLine(entry: AxisAccess | undefined): string {
+  if (!entry || !entry.active) {
+    return 'Not held yet';
+  }
+  if (entry.expiresAt === null) {
+    return 'Lifetime access';
+  }
+  return 'Held until ' + formatDay(entry.expiresAt) + '. Time is added on top.';
+}
+
+export function SubscribePage({ plans, access, instructions, payments }: SubscribeProps) {
+  let planId = plans[0]?.id ?? '';
+  let axis = 'forex';
+  let method = instructions[0]?.method ?? 'bank';
+  let submitted = false;
+
+  const plan = findPlan(planId);
+  const instruction = instructions.find(entry => entry.method === method);
+
+  let summary = '';
+  if (plan && plan.scope === 'single') {
+    summary = `${planTitle(plan)} (${axisLabel(axis)}) for ${planLength(plan)}`;
+  } else if (plan) {
+    summary = `${planTitle(plan)} for ${planLength(plan)}`;
+  }
+
+  const claim = $forms((fields: FormData) => {
+    const request = claimPayment(planId, axis, method, String(fields.get('reference') ?? ''));
+    $track(claim).onSuccess(outcome => {
+      if (outcome.ok) submitted = true;
+    });
+    return request;
+  });
+
+  return (
+    <section aria-labelledby="subscribe-heading">
+      <div class="title">
+        <p class="kicker">"Plans"</p>
+        <h1 id="subscribe-heading">"Subscribe"</h1>
+        <p>"Pay by bank, mobile money or USDT, then send us the payment reference. An admin checks it, and your access starts as soon as it is approved."</p>
+      </div>
+
+      if (submitted) {
+        <div class="done" role="status">
+          <h2>"Payment submitted"</h2>
+          <p>summary + ". We will check the reference and open your access once it is approved."</p>
+          <a class="desk-button" route-to="/app">"Back to your signals"</a>
+        </div>
+      } else {
+        <form class="steps" onSubmit={claim.submit}>
+          <section class="desk-row" aria-labelledby="plan-heading">
+            <div class="desk-row__head">
+              <h2 id="plan-heading">"Plan"</h2>
+              <p>"One axis, or all three together."</p>
+            </div>
+            <div>
+              <fieldset class="choices">
+                <legend class="visually-hidden">"Plan"</legend>
+                for (const option of plans) {
+                  <label key={option.id} class="choice">
+                    <input type="radio" name="plan" value={option.id} checked={planId === option.id} onChange={() => planId = option.id} />
+                    <strong>planTitle(option)</strong>
+                    <span>planLength(option)</span>
+                    <span class="price">"$" + option.price <small>" USD"</small></span>
+                  </label>
+                }
+              </fieldset>
+              <p class="more">"More plan lengths are coming. Buying the same axis again adds time on top of what you hold."</p>
+            </div>
+          </section>
+
+          if (plan && plan.scope === 'single') {
+            <section class="desk-row" aria-labelledby="axis-heading">
+              <div class="desk-row__head">
+                <h2 id="axis-heading">"Axis"</h2>
+                <p>"The market this plan opens."</p>
+              </div>
+              <fieldset class="choices">
+                <legend class="visually-hidden">"Axis"</legend>
+                for (const entry of access) {
+                  <label key={entry.axis} class="choice">
+                    <input type="radio" name="axis" value={entry.axis} checked={axis === entry.axis} onChange={() => axis = entry.axis} />
+                    <strong>entry.label</strong>
+                    <span>heldLine(entry)</span>
+                  </label>
+                }
+              </fieldset>
+            </section>
+          }
+
+          <section class="desk-row" aria-labelledby="method-heading">
+            <div class="desk-row__head">
+              <h2 id="method-heading">"Payment"</h2>
+              <p>"Pay first, then come back with the reference."</p>
+            </div>
+            <div>
+              <fieldset class="choices">
+                <legend class="visually-hidden">"Payment method"</legend>
+                for (const entry of instructions) {
+                  <label key={entry.method} class="choice">
+                    <input type="radio" name="method" value={entry.method} checked={method === entry.method} onChange={() => method = entry.method} />
+                    <strong>entry.label</strong>
+                  </label>
+                }
+              </fieldset>
+              if (instruction && instruction.details) {
+                <p class="details"><strong>"Pay " + paymentMethodLabel(method) + " to"</strong> instruction.details</p>
+              } else {
+                <p class="details" data-missing="true">"The payment details for this method are not published yet. Contact Triaxis for them before paying."</p>
+              }
+            </div>
+          </section>
+
+          <section class="desk-row" aria-labelledby="reference-heading">
+            <div class="desk-row__head">
+              <h2 id="reference-heading">"Reference"</h2>
+              <p>"The transaction ID or reference from your payment."</p>
+            </div>
+            <div class="reference">
+              if (plan) {
+                <p class="summary">"You are paying " <strong>"$" + plan.price</strong> " for " + summary + "."</p>
+              }
+              <label class="desk-label">
+                "Payment reference"
+                <input name="reference" minlength={3} maxlength={120} required autocomplete="off" />
+              </label>
+            </div>
+          </section>
+
+          <div class="actions">
+            <button class="desk-button" type="submit" disabled={claim.pending || !plan}>
+              if (claim.pending) {
+                "Submitting…"
+              } else {
+                "Submit payment"
+              }
+            </button>
+            if (claim.result && !claim.result.ok) {
+              <p role="alert">claim.result.message</p>
+            } else if (claim.errors.length > 0) {
+              <p role="alert">"The payment could not be submitted. Check your session and try again."</p>
+            }
+          </div>
+        </form>
+      }
+
+      if (payments.length > 0) {
+        <section class="history" aria-labelledby="history-heading">
+          <h2 id="history-heading">"Your payments"</h2>
+          <ul>
+            for (const payment of payments) {
+              <li key={payment.id}>
+                <span>"$" + payment.amount + " · " + payment.axes.map(axisLabel).join(', ') + " · " + monthsText(payment.months) + " · " + paymentMethodLabel(payment.method) + " " + payment.reference</span>
+                <span data-status={payment.status}>paymentStatusLabels[payment.status]</span>
+                <span>formatDay(payment.createdAt)</span>
+              </li>
+            }
+          </ul>
+        </section>
+      }
+    </section>
+  );
+}

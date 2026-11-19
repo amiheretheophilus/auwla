@@ -1,0 +1,86 @@
+import { navigate } from '@memoized-dom/router';
+import { memberLogin, signUp } from '#server-functions';
+import { AuthForm } from './AuthForm.auwla';
+
+<style>
+  .hint {
+    margin: -.6rem 0 0;
+    color: var(--desk-muted);
+    font-size: .78rem;
+  }
+
+  /* The link to the other form. It is slotted into AuthForm, so its style lives here. */
+  .switch-link {
+    color: var(--desk-accent);
+    text-underline-offset: .2em;
+  }
+</style>
+
+/** The first error a member form has to show, or ''. */
+function formError(failed: boolean, message: string | undefined, fallback: string): string {
+  if (!failed) {
+    return '';
+  }
+  return message ?? fallback;
+}
+
+export function MemberSignInForm() {
+  const form = $forms((fields: FormData) => {
+    const request = memberLogin(String(fields.get('email') ?? '').trim(), String(fields.get('password') ?? ''));
+    $track(form).onSuccess(() => {
+      navigate('/app', { replace: true });
+    });
+    return request;
+  });
+
+  const error = formError(form.errors.length > 0, form.errors[0]?.message, 'Sign-in failed. Try again.');
+
+  return (
+    <AuthForm submit={form.submit} pending={form.pending} action="Sign in" pendingAction="Signing in…" error={error}>
+      <label class="desk-label">
+        "Email"
+        <input name="email" type="email" autocomplete="username" maxlength={254} required />
+      </label>
+      <label class="desk-label">
+        "Password"
+        <input name="password" type="password" autocomplete="current-password" maxlength={128} required />
+      </label>
+      <span slot="switch">"New to Triaxis? " <a class="switch-link" route-to="/sign-up">"Create an account"</a></span>
+    </AuthForm>
+  );
+}
+
+export function MemberSignUpForm() {
+  const form = $forms((fields: FormData) => {
+    const request = signUp(
+      String(fields.get('name') ?? '').trim(),
+      String(fields.get('email') ?? '').trim(),
+      String(fields.get('password') ?? ''),
+    );
+    $track(form).onSuccess(() => {
+      navigate('/app/subscribe', { replace: true });
+    });
+    return request;
+  });
+
+  const error = formError(form.errors.length > 0, form.errors[0]?.message, 'Sign-up failed. Try again.');
+
+  return (
+    <AuthForm submit={form.submit} pending={form.pending} action="Create account" pendingAction="Creating account…" error={error}>
+      <label class="desk-label">
+        "Full name"
+        <input name="name" autocomplete="name" minlength={2} maxlength={80} required />
+      </label>
+      <label class="desk-label">
+        "Email"
+        <input name="email" type="email" autocomplete="email" maxlength={254} required />
+      </label>
+      <label class="desk-label">
+        "Password"
+        <input name="password" type="password" autocomplete="new-password" minlength={12} maxlength={128} required aria-describedby="password-hint" />
+      </label>
+      <p class="hint" id="password-hint">"At least 12 characters."</p>
+      <span slot="switch">"Already a member? " <a class="switch-link" route-to="/sign-in">"Sign in"</a></span>
+    </AuthForm>
+  );
+}

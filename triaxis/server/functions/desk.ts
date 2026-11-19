@@ -1,6 +1,7 @@
 import { define } from '../define';
 import { createAnalysis, publishAnalysis, saveAnalysis } from '../desk/analyses';
 import { getAnalyst } from '../auth/auth';
+import { decidePayment } from '../members/payments';
 import { isSameOrigin } from '../auth/routes';
 import type { StaffMember } from '../../src/desk/analysis';
 
@@ -23,6 +24,15 @@ export const startAnalysis = define.function({
 export const saveAnalysisDraft = define.function({
   async post({ request }, id: number, revision: number, fields: Record<string, unknown>) {
     return asStaff(request, staff => saveAnalysis(id, revision, fields, staff));
+  },
+});
+
+export const decideMemberPayment = define.function({
+  async post({ request }, id: number, decision: 'approved' | 'rejected') {
+    if (decision !== 'approved' && decision !== 'rejected') {
+      return { ok: false, message: 'Approve or reject the payment.' } as const;
+    }
+    return asStaff(request, staff => decidePayment(id, decision, staff));
   },
 });
 

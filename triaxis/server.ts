@@ -1,7 +1,7 @@
 import { serve } from '@memoized-dom/server';
 import { define } from './server/define';
 import { databaseIsReady } from './server/database';
-import { authRoutes, leaveDesk } from './server/auth/routes';
+import { authRoutes, leaveDesk, leaveMembers } from './server/auth/routes';
 import { App } from './src/App.auwla';
 
 const app = serve({ define });
@@ -28,14 +28,24 @@ const privateResponse = define.middleware(async (_context, next) => {
 
 app.use('/desk', privateResponse);
 app.use('/desk/sign-in', privateResponse);
+app.use('/app', privateResponse);
+app.use('/sign-in', privateResponse);
+app.use('/sign-up', privateResponse);
 app.use('/_memoized/routed', privateResponse);
 app.use('/_fn/desk/*', privateResponse);
+app.use('/_fn/members/*', privateResponse);
 app.post('/api/auth/*', ({ request }) => authRoutes.fetch(request));
 app.post('/desk/sign-out', ({ request }) => leaveDesk(request));
+app.post('/sign-out', ({ request }) => leaveMembers(request));
 
 app.ssr('/', App);
 app.ssr('/desk', App, { delivery: 'buffer' });
 app.ssr('/desk/sign-in', App, { delivery: 'buffer' });
 app.ssr('/desk/analyses/:id', App, { delivery: 'buffer' });
+app.ssr('/desk/payments', App, { delivery: 'buffer' });
+app.ssr('/sign-in', App, { delivery: 'buffer' });
+app.ssr('/sign-up', App, { delivery: 'buffer' });
+app.ssr('/app', App, { delivery: 'buffer' });
+app.ssr('/app/subscribe', App, { delivery: 'buffer' });
 
 export default app;

@@ -1,0 +1,45 @@
+import '../../desk/desk-theme.auwla';
+import type { Member } from '../membership';
+import { MemberHeader } from './MemberHeader.auwla';
+
+<style>
+  body {
+    margin: 0;
+  }
+
+  /* The member pages share the desk's form and button primitives (`.desk`, desk-theme.auwla). */
+  .desk {
+    min-height: 100vh;
+    background: var(--desk-paper);
+    color: var(--desk-ink);
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-synthesis: none;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .member-main {
+    max-width: 76rem;
+    margin-inline: auto;
+    padding: clamp(1.75rem, 4vw, 3rem) var(--desk-gutter) 0;
+  }
+
+  .risk-note {
+    margin: 0;
+    padding: 2rem 0;
+    color: var(--desk-muted);
+    font-size: .8rem;
+  }
+</style>
+
+/** A signed-in member page: the header, then the page itself. */
+export function MemberShell({ member }: { member: Member }) {
+  return (
+    <div class="desk">
+      <MemberHeader member={member} />
+      <main class="member-main">
+        <slot />
+        <p class="risk-note">"Trading involves risk. Signals are information, not financial advice, and past results do not promise future ones."</p>
+      </main>
+    </div>
+  );
+}
