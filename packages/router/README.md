@@ -310,6 +310,7 @@ const state = route.state as { draftOrderId?: number; step?: number } | null;
 1. **Manual Restoration Enforcement**: Disables native browser scroll snapping (`history.scrollRestoration = 'manual'`) so asynchronous component rendering never gets clamped to `(0, 0)`.
 2. **History-Keyed Tracking**: Automatically captures viewport `(x, y)` scroll positions per history entry, persisting them to memory with `sessionStorage` fallback.
 3. **Pop Navigation (Back/Forward)**: Automatically restores exact previous scroll coordinates after the target route's microtask and render phase settle.
+   **Reload**: the browser keeps `'manual'` on the entry, so after a reload it would leave the page at the top. The entry keeps its history key across the reload and its offset was saved on `pagehide`, so the first load restores that offset. A fresh visit is a new entry with nothing saved.
 4. **Push Navigation (New Link)**: Resets viewport scroll to top `(0, 0)`.
 5. **Hash Navigation (`#target`)**: Queries `#target` elements by `id` or `name` and scrolls them into view, retrying on the next animation frame if asynchronous data is loading.
 6. **The person scrolling wins**: a vertical wheel, a touch or a scrolling key cancels a restore that has not happened yet. A mostly sideways wheel does not: a touchpad swipe back sends those, some after the entry changes.

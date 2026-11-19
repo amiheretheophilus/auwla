@@ -242,8 +242,13 @@ export function createScrollCoordinator(
       awaitingRestoration = true;
       const apply = () => {
         if (disposed || token !== generation) return;
-        // A saved history offset takes precedence over the entry's hash.
-        const saved = type === 'pop' && key != null ? getPosition(key) : undefined;
+        // A saved history offset takes precedence over the entry's hash. A load reads it too:
+        // `connect` sets `history.scrollRestoration` to 'manual', which the browser keeps on the
+        // entry, so after a reload (or a cross-document return to this entry) the browser
+        // leaves the page at the top. The entry keeps its key across the reload, and `pagehide`
+        // stored its offset in session storage, so the coordinator restores it instead. A fresh
+        // visit is a new entry with no saved offset and keeps the browser's position.
+        const saved = (type === 'pop' || type === 'load') && key != null ? getPosition(key) : undefined;
         if (saved !== undefined) {
           schedule(() => {
             awaitingRestoration = false;

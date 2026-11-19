@@ -161,6 +161,36 @@ describe('scroll restoration coordinator', () => {
     coordinator.dispose();
   });
 
+  it('restores the offset an entry saved when it was hidden after a reload of that entry', () => {
+    const frames = deferredFrames();
+    const position = spyOnAccessor(window, 'scrollY', 'get').mockReturnValue(0);
+
+    // The page is open and scrolled; reloading hides it, which stores the offset.
+    const before = createScrollCoordinator();
+    before.connect();
+    before.restore(new URL('http://localhost/signals'), 'load', 'entry');
+    frames.flush();
+    position.mockReturnValue(1240);
+    window.dispatchEvent(new Event('pagehide'));
+    before.dispose();
+
+    // The reloaded document has 'manual' restoration, so the browser leaves it at the top.
+    frames.scrollTo.mockClear();
+    position.mockReturnValue(0);
+    const after = createScrollCoordinator();
+    after.connect();
+    after.restore(new URL('http://localhost/signals#plans'), 'load', 'entry');
+    frames.flush();
+    expect(frames.scrollTo).toHaveBeenCalledWith(0, 1240);
+
+    // A fresh visit is a new entry: nothing saved, so the position is left alone.
+    frames.scrollTo.mockClear();
+    after.restore(new URL('http://localhost/signals'), 'load', 'fresh-entry');
+    frames.flush();
+    expect(frames.scrollTo).not.toHaveBeenCalled();
+    after.dispose();
+  });
+
   it('cancels a delayed hash observer when another navigation wins', async () => {
     const frames = deferredFrames();
     const coordinator = createScrollCoordinator();
