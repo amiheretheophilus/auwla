@@ -10,7 +10,6 @@ import { StaffBadge } from '../../desk/StaffBadge.auwla';
     z-index: 20;
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 1rem;
     min-height: 3.65rem;
     padding-inline: var(--desk-gutter);
@@ -26,13 +25,17 @@ import { StaffBadge } from '../../desk/StaffBadge.auwla';
     align-self: stretch;
     align-items: stretch;
     gap: clamp(1rem, 2.4vw, 1.75rem);
+    margin-left: auto;
     font-size: .875rem;
   }
 
-  .member-header form,
-  .identity,
-  .cta {
-    align-self: center;
+  .account {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .account form {
     margin: 0;
   }
 
@@ -42,6 +45,7 @@ import { StaffBadge } from '../../desk/StaffBadge.auwla';
     align-items: center;
     color: var(--desk-muted);
     text-decoration: none;
+    white-space: nowrap;
     transition: color .2s ease;
   }
 
@@ -82,9 +86,31 @@ import { StaffBadge } from '../../desk/StaffBadge.auwla';
     border-left: 1px solid var(--desk-rule);
   }
 
+  /* On a phone the links get a row of their own under the wordmark, which scrolls sideways
+     when they don't fit, so every page stays one tap away. */
   @media (max-width: 40rem) {
-    .nav-link {
-      display: none;
+    .member-header {
+      flex-wrap: wrap;
+      row-gap: 0;
+    }
+
+    .account {
+      margin-left: auto;
+    }
+
+    .identity {
+      padding-left: 0;
+      border-left: 0;
+    }
+
+    .member-header nav {
+      order: 1;
+      flex-basis: 100%;
+      min-height: 2.75rem;
+      margin-inline: calc(-1 * var(--desk-gutter));
+      padding-inline: var(--desk-gutter);
+      overflow-x: auto;
+      border-top: 1px solid var(--desk-rule);
     }
   }
 </style>
@@ -127,6 +153,13 @@ export function MemberHeader({ member }: { member: Member | null }) {
           if (member.staffRole !== 'admin') {
             <a class="nav-link" route-to="/pricing" aria-current={currentPage(onPlans)}>"Plans"</a>
           }
+        } else {
+          <a class="nav-link" route-to="/pricing" aria-current={currentPage(path === '/pricing')}>"Pricing"</a>
+          <a class="nav-link" route-to="/sign-in" aria-current={currentPage(path === '/sign-in')}>"Sign in"</a>
+        }
+      </nav>
+      <div class="account">
+        if (member) {
           if (member.staffRole) {
             <span class="identity"><StaffBadge member={{ id: member.id, name: member.name, role: member.staffRole }} role={true} /></span>
           } else {
@@ -136,11 +169,9 @@ export function MemberHeader({ member }: { member: Member | null }) {
             <button class="desk-button desk-button--quiet" type="submit">"Sign out"</button>
           </form>
         } else {
-          <a class="nav-link" route-to="/pricing" aria-current={currentPage(path === '/pricing')}>"Pricing"</a>
-          <a class="nav-link" route-to="/sign-in" aria-current={currentPage(path === '/sign-in')}>"Sign in"</a>
-          <span class="cta"><a class="desk-button" route-to="/pricing">"Get started"</a></span>
+          <a class="desk-button" route-to="/pricing">"Get started"</a>
         }
-      </nav>
+      </div>
     </header>
   );
 }
