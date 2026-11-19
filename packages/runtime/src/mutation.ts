@@ -643,6 +643,14 @@ recoveryHooks.recoverMutations = recoverMutations;
 recoveryHooks.resumeMutations = resumeMutations;
 recoveryHooks.captureMutations = captureMutationScope;
 
+/**
+ * The native promise an `async` function returns. Only that: a data value such as a
+ * `$fetch` resource can have its own `then`, and must come back from the call unchanged.
+ */
+function isPromiseLike(value: unknown): value is Promise<unknown> {
+  return value instanceof Promise;
+}
+
 function differs(prior: readonly unknown[], after: readonly unknown[]): boolean {
   return prior.length !== after.length || prior.some((value, i) => !Object.is(value, after[i]));
 }
@@ -689,9 +697,38 @@ export function observeMutation(
   const state = mutationStore();
   const pending = state.pending;
   let complete = false;
-  const observation: Observation & { check(final: boolean): void } = {
+  // While an async call awaits, other code runs and makes its own edits. Those are not the
+  // call's: an object another edit already reported since the last check is skipped (its
+  // readers are already re-reading it), and a read that now gives another value is skipped
+  // too, since the call cannot rebind its caller's variables and compiled code reports its
+  // own assignments.
+  let awaiting = false;
+  let checkedAt = 0;
+  function reportedElsewhere(object: object): boolean {
+    return awaiting && timed && (editedAt.get(object) ?? 0) > checkedAt;
+  }
+  const observation: Observation & { check(final: boolean): void; settle(): void } = {
     finish(result) {
       if (complete) return result;
+      if (isPromiseLike(result)) {
+        // An async call returns at its first `await`, before the edits that follow it.
+        // Report what changed so far, and stay pending: each resume after an `await`
+        // recovers pending observations, and the call's end is the final check.
+        // The end is watched on a side chain and the caller gets the call's own promise:
+        // whoever awaits it still receives its failure, and a call its creator keeps quiet
+        // (a cancelled server action, `data/src/transparent-actions.ts`) stays quiet.
+        this.check(false);
+        awaiting = true;
+        checkedAt = clock;
+        const settle = () => this.settle();
+        result.then(settle, settle);
+        return result;
+      }
+      this.settle();
+      return result;
+    },
+    settle() {
+      if (complete) return;
       this.check(true);
       complete = true;
       pending.delete(reference);
@@ -704,7 +741,6 @@ export function observeMutation(
       values = [];
       reached = [];
       objects.clear();
-      return result;
     },
     recover() {
       this.check(false);
@@ -714,7 +750,7 @@ export function observeMutation(
       const changed = new Set<object>();
       for (const [object, prior] of objects) {
         const after = snapshot(object);
-        if (differs(prior, after)) changed.add(object);
+        if (differs(prior, after) && !reportedElsewhere(object)) changed.add(object);
         objects.set(object, after);
       }
       // A package's value counts as changed itself, so the roots holding it elsewhere (an
@@ -730,12 +766,14 @@ export function observeMutation(
         const value = read();
         const replaced = !Object.is(value, values[index]);
         moved ||= replaced;
-        if (replaced || reachesAny(reached[index]!, changed) || hidden?.includes(index) === true) {
+        if ((replaced && !awaiting) || reachesAny(reached[index]!, changed) || hidden?.includes(index) === true) {
           notifications[index]!();
         }
       });
       // Once: a recovery after a throw stands for the end of the call.
       hidden = undefined;
+      // The next check of an awaiting call skips only edits reported after this one.
+      if (awaiting) checkedAt = clock;
       // A later recovery compares with what each read reaches now.
       if (!final && (moved || changed.size > 0)) observe();
       notifyAliases({ one: null, many: changed }, { kind: 'unknown' });

@@ -238,6 +238,22 @@ An opaque call takes one shallow snapshot of each object its reads reach, before
 and after. A read is notified when one of its objects changed or the read now
 gives another value. This answers the same question as a deep snapshot of each
 read, without taking two more.
+An `async` call returns its promise at its first `await`, before the edits after
+it. So `finish` given a native promise reports what changed so far, keeps the
+observation pending, and watches the promise's end on a side chain; each resume
+after an `await` recovers pending observations, and the end is the final check.
+The caller gets the call's own promise back, so an awaiting caller still catches
+its failure. The side chain marks the promise handled: a call its creator keeps
+quiet (a cancelled server action) stays quiet, and a failed async handler nobody
+awaits is not reported as an unhandled rejection. While it awaits, a read that now
+gives another value is not blamed on the call (it cannot rebind its caller's
+variables), nor is an object another edit reported since the last check. Only a
+native `Promise` counts: a `$fetch` resource can have its own `then` and comes back
+unchanged. Cases: "an async call editing an argument after await", "edits between
+two awaits", "a rejected async call" in `tests/cases/handlers.mutations.test.ts`;
+runtime: the two async tests at the end of `packages/runtime/tests/mutation.test.ts`.
+Before this, `async decide(row)` that set `row.status` after an `await` updated the
+row but not a list filtered by status.
 Completed observations immediately clear their read/notification closures,
 values, reach sets and snapshots, including when a caller retains the completed
 handle. Successful calls do not leave those payloads alive until recovery runs.

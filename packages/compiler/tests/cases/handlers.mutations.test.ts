@@ -96,3 +96,50 @@ behaves('mutation: an opaque call updates aliases of a nested object', {
   steps: [{ click: 'button' }],
   check: show(['1:1', '2:2']),
 });
+
+// An async function returns at its first `await`, so the call site's observation must stay open
+// until the call settles (`runtime/src/mutation.ts`, `finish`). Found in Triaxis: approving a
+// payment after `await` left it under the Waiting tab.
+behaves('mutation: an async call editing an argument after await updates derived readers', {
+  source: `export function App() {
+    const rows = [{ id: 1, status: 'pending' }, { id: 2, status: 'pending' }];
+    const waiting = rows.filter(row => row.status === 'pending');
+    async function decide(row) { const next = await defer('decision'); row.status = next; }
+    return <main><p>{waiting.length}</p>
+      {rows.map(row => <button key={row.id} id={'b' + row.id} onClick={() => decide(row)}>x</button>)}</main>;
+  }`,
+  steps: [{ click: '#b1' }, { resolve: 'decision', value: 'done' }],
+  check: show(['2', '2', '1']),
+});
+
+behaves('mutation: edits between two awaits show at each resume', {
+  source: `export function App() {
+    const job = { step: 'idle' };
+    const label = job.step.toUpperCase();
+    async function run(target) {
+      await defer('upload'); target.step = 'processing';
+      await defer('process'); target.step = 'done';
+    }
+    return <main><p>{label}</p><button onClick={() => run(job)}>run</button></main>;
+  }`,
+  steps: [{ click: 'button' }, { resolve: 'upload' }, { resolve: 'process' }],
+  check: show(['IDLE', 'IDLE', 'PROCESSING', 'DONE']),
+});
+
+behaves('mutation: a rejected async call still reports the edits it made', {
+  source: `export function App() {
+    const rows = [{ id: 1, status: 'pending' }];
+    const waiting = rows.filter(row => row.status === 'pending');
+    let message = '';
+    async function decide(row) {
+      row.status = 'checking';
+      await defer('decision');
+    }
+    async function click() {
+      try { await decide(rows[0]); } catch (error) { message = error.message; }
+    }
+    return <main><p>{waiting.length}:{message}</p><button onClick={click}>x</button></main>;
+  }`,
+  steps: [{ click: 'button' }, { reject: 'decision', message: 'refused' }],
+  check: show(['1:', '0:', '0:refused']),
+});

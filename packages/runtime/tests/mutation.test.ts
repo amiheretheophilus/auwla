@@ -283,3 +283,36 @@ it('converts a store key as a computed member does: once, before the value', () 
   expect(log).toEqual(['key', 'value']);
   expect(object.k).toBe(2);
 });
+
+it('keeps watching an async call until it settles, and hands back its own promise', async () => {
+  const row = { status: 'pending' };
+  let notified = 0;
+  let decide!: (value: string) => void;
+  const decided = new Promise<string>((resolve) => { decide = resolve; });
+  async function call(target: typeof row) {
+    target.status = await decided;
+  }
+
+  const promise = call(row);
+  const returned = observeMutation([() => row], [() => { notified++; }]).finish(promise);
+  expect(returned).toBe(promise);
+  expect(notified).toBe(0);
+
+  decide('approved');
+  await returned;
+  await Promise.resolve();
+  expect(row.status).toBe('approved');
+  expect(notified).toBe(1);
+});
+
+it('lets an awaiting caller catch a failed async call it watches', async () => {
+  const row = { status: 'pending' };
+  async function call(target: typeof row) {
+    target.status = 'checking';
+    await Promise.resolve();
+    throw new Error('refused');
+  }
+
+  const returned = observeMutation([() => row], [() => {}]).finish(call(row));
+  await expect(returned).rejects.toThrow('refused');
+});
