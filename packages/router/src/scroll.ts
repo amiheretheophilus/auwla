@@ -87,8 +87,16 @@ export function createScrollCoordinator(
   try { storage = win?.sessionStorage; } catch { /* Restricted storage. */ }
 
   const memoryPositions = new Map<string, ScrollPosition>();
+  /**
+   * The offset each page (path and query) had when it was last left, for links back to it.
+   * Memory only: a reload or a full-page sign-out starts every page at the top again.
+   */
+  const pagePositions = new Map<string, ScrollPosition>();
   let storedKeys: string[] | null = null;
   let activeKey: string | null = null;
+  let activePage: string | null = null;
+  /** The page shown when the current navigation began, set by `capture`. */
+  let leftPage: string | null = null;
   let previousScrollRestoration: ScrollRestoration | undefined;
   let pendingFrame: number | null = null;
   let connected = false;
@@ -161,6 +169,33 @@ export function createScrollCoordinator(
     if (persist) persistPosition(key, pos);
   }
 
+  function pageOf(url: URL): string {
+    return `${url.pathname}${url.search}`;
+  }
+
+  /** Remembers where `page` was left. The newest pages are kept, up to the same bound as entries. */
+  function rememberPage(page: string, pos: ScrollPosition): void {
+    pagePositions.delete(page);
+    if (pagePositions.size >= MAX_SAVED_POSITIONS) {
+      const oldest = pagePositions.keys().next().value;
+      if (oldest !== undefined) pagePositions.delete(oldest);
+    }
+    pagePositions.set(page, pos);
+  }
+
+  /**
+   * Where a link to `page` should land: where the person left it, so a section reached from
+   * the navigation opens where they were, as an app's tabs do. A link to the page already
+   * shown, or to one not visited yet, goes to the top.
+   */
+  function linkPosition(page: string, leaving: string | null): ScrollPosition {
+    if (page !== leaving) {
+      const remembered = pagePositions.get(page);
+      if (remembered !== undefined) return remembered;
+    }
+    return { x: 0, y: 0 };
+  }
+
   function getPosition(key: string): ScrollPosition | undefined {
     const memory = memoryPositions.get(key);
     if (memory !== undefined) return memory;
@@ -225,9 +260,13 @@ export function createScrollCoordinator(
     capture(key) {
       if (disposed) return;
       const targetKey = key ?? activeKey;
+      // Capturing the shown entry means it is being left.
+      if (targetKey === activeKey) leftPage = activePage;
       if (awaitingRestoration && targetKey === activeKey) return;
       if (targetKey !== null && targetKey !== undefined) {
-        savePosition(targetKey, currentPosition(), true);
+        const position = currentPosition();
+        savePosition(targetKey, position, true);
+        if (targetKey === activeKey && activePage !== null) rememberPage(activePage, position);
       }
     },
 
@@ -238,6 +277,11 @@ export function createScrollCoordinator(
       cancelRestore();
       const token = generation;
       activeKey = key ?? null;
+      const page = pageOf(url);
+      activePage = page;
+      // From the last capture, not the last restore: the runtime restores a pushed entry twice,
+      // the second time only to give it the key the browser committed.
+      const leavingPage = leftPage;
       if (win === undefined) return;
       awaitingRestoration = true;
       const apply = () => {
@@ -284,8 +328,18 @@ export function createScrollCoordinator(
           return;
         }
 
-        // New pages reset; history traversals without a snapshot fall back to top.
-        if (type === 'push' || type === 'pop') {
+        // A link opens its page where it was last left, or at the top.
+        if (type === 'push') {
+          const position = linkPosition(page, leavingPage);
+          schedule(() => {
+            awaitingRestoration = false;
+            win.scrollTo(position.x, position.y);
+          }, token);
+          return;
+        }
+
+        // History traversals without a snapshot fall back to top.
+        if (type === 'pop') {
           schedule(() => {
             awaitingRestoration = false;
             win.scrollTo(0, 0);
@@ -367,7 +421,10 @@ export function createScrollCoordinator(
       disposed = true;
       cancelRestore();
       memoryPositions.clear();
+      pagePositions.clear();
       activeKey = null;
+      activePage = null;
+      leftPage = null;
       if (pendingFrame !== null && win !== undefined) {
         if (win.cancelAnimationFrame !== undefined) win.cancelAnimationFrame(pendingFrame);
         else clearTimeout(pendingFrame);

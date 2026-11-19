@@ -380,6 +380,51 @@ describe('scroll restoration coordinator', () => {
     coordinator.dispose();
   });
 
+  it('opens a page reached by a link where it was last left', () => {
+    let scrollY = 0;
+    const scrollTo = vi.fn((_x: number, y: number) => { scrollY = y; });
+    const mockWindow = {
+      scrollX: 0,
+      get scrollY() { return scrollY; },
+      scrollTo,
+      requestAnimationFrame: (cb: () => void) => { cb(); return 1; },
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as Window;
+    const coordinator = createScrollCoordinator({ window: mockWindow });
+
+    // The list is scrolled, then left for another section through a link.
+    coordinator.restore(new URL('http://localhost/desk'), 'load', 'k1');
+    scrollY = 880;
+    coordinator.capture('k1');
+    coordinator.restore(new URL('http://localhost/desk/payments'), 'push', 'k2');
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
+
+    // The navigation's link back to the list opens it where it was, as a new entry.
+    scrollY = 120;
+    coordinator.capture('k2');
+    coordinator.restore(new URL('http://localhost/desk'), 'push', 'k3');
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 880);
+    // The runtime restores a pushed entry again once the browser commits its real key.
+    coordinator.restore(new URL('http://localhost/desk'), 'push', 'k3-committed');
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 880);
+
+    // A link to the page already shown goes to the top.
+    coordinator.capture('k3-committed');
+    coordinator.restore(new URL('http://localhost/desk'), 'push', 'k4');
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
+
+    // So does a page not visited yet, and the same path with another query.
+    coordinator.capture('k4');
+    coordinator.restore(new URL('http://localhost/desk?status=posted'), 'push', 'k5');
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 0);
+
+    // The section left earlier still opens where it was.
+    coordinator.restore(new URL('http://localhost/desk/payments'), 'push', 'k6');
+    expect(scrollTo).toHaveBeenLastCalledWith(0, 120);
+    coordinator.dispose();
+  });
+
   it('scrolls hash targets into view with fallback retry', () => {
     const scrollIntoView = vi.fn();
     const mockElement = { scrollIntoView } as unknown as Element;

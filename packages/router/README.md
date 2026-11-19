@@ -311,7 +311,7 @@ const state = route.state as { draftOrderId?: number; step?: number } | null;
 2. **History-Keyed Tracking**: Automatically captures viewport `(x, y)` scroll positions per history entry, persisting them to memory with `sessionStorage` fallback.
 3. **Pop Navigation (Back/Forward)**: Automatically restores exact previous scroll coordinates after the target route's microtask and render phase settle.
    **Reload**: the browser keeps `'manual'` on the entry, so after a reload it would leave the page at the top. The entry keeps its history key across the reload and its offset was saved on `pagehide`, so the first load restores that offset. A fresh visit is a new entry with nothing saved.
-4. **Push Navigation (New Link)**: Resets viewport scroll to top `(0, 0)`.
+4. **Push Navigation (New Link)**: Opens the page where it was last left, so a section reached from the navigation keeps the person's place, as an app's tabs do. A page is its path and query. A page not visited yet starts at the top `(0, 0)`. These offsets live in memory only, so a reload or a full-page sign-out starts every page at the top. (A link to the page already shown is a replace and keeps the position.)
 5. **Hash Navigation (`#target`)**: Queries `#target` elements by `id` or `name` and scrolls them into view, retrying on the next animation frame if asynchronous data is loading.
 6. **The person scrolling wins**: a vertical wheel, a touch or a scrolling key cancels a restore that has not happened yet. A mostly sideways wheel does not: a touchpad swipe back sends those, some after the entry changes.
 
