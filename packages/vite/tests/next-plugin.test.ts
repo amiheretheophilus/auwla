@@ -150,9 +150,11 @@ describe('the Vite plugin', () => {
     // An unclosed expression container is a syntax error.
     write('broken/src/App.tsx', good.replace('{label} {count}', '{label} {</'));
     await waitFor(() => {
-      const error = send.mock.calls.map(([payload]) => payload as { type: string; err?: { message: string; loc?: { line: number } } })
+      const error = send.mock.calls.map(([payload]) => payload as { type: string; err?: { message: string; stack: string; loc?: { line: number } } })
         .find((payload) => payload.type === 'error');
       expect(error?.err?.loc?.line).toBeGreaterThan(0);
+      // The mistake is the author's: no frame of the plugin's own code follows it.
+      expect(error?.err?.stack).not.toMatch(/\n\s*at /);
     }, { timeout: 15_000 });
 
     send.mockClear();
@@ -189,6 +191,35 @@ describe('the Vite plugin', () => {
     write('live/src/Page.tsx', `export function Page() { return <main><h1>Edited</h1></main>; }`);
     await waitFor(async () => {
       expect(await (await fetch(`${origin}/`)).text()).toContain('<h1>Edited</h1>');
+    }, { timeout: 15_000 });
+  }, 60_000);
+
+  it('starts while a page fails to compile, shows the error, and renders the page once it is fixed', async () => {
+    write('starts-broken/index.html', '<!doctype html><html><head></head><body><div id="root"><!--ssr-outlet--></div><script type="module" src="/src/main.ts"></script></body></html>');
+    write('starts-broken/src/main.ts', `import { mount } from '@memoized-dom/runtime';\nimport { Page } from './Page';\nmount('root', Page);\n`);
+    write('starts-broken/src/Page.tsx', `export function Page() { return <main><h1>{</h1></main>; }`);
+    write('starts-broken/server.ts', `import { serve } from '@memoized-dom/server';\nimport { Page } from './src/Page';\nimport { define } from '#server/define';\nconst app = serve({ define });\napp.ssr(Page);\nexport default app;\n`);
+    write('starts-broken/server/define.ts', `import { createDefine } from '@memoized-dom/server';\nexport const define = createDefine();\n`);
+
+    nativeServer = await createDevServer({
+      root: join(root, 'starts-broken'),
+      configFile: false,
+      logLevel: 'silent',
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server' })],
+      server: { host: '127.0.0.1', port: 0 },
+    });
+    const page = () => fetch(`${nativeServer!.origin}/`, { headers: { accept: 'text/html' } });
+    const broken = await page();
+    expect(broken.status).toBe(500);
+    const overlay = await broken.text();
+    expect(overlay).toContain('Development error');
+    // The overlay shows the author's file and its code frame, not the module runner's stack.
+    expect(overlay).toContain('Page.tsx');
+    expect(overlay).not.toContain('module-runner');
+
+    write('starts-broken/src/Page.tsx', `export function Page() { return <main><h1>Fixed</h1></main>; }`);
+    await waitFor(async () => {
+      expect(await (await page()).text()).toContain('<h1>Fixed</h1>');
     }, { timeout: 15_000 });
   }, 60_000);
 

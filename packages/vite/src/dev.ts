@@ -4,7 +4,7 @@ import { createServer as createPortProbe } from 'node:net';
 import type { Duplex } from 'node:stream';
 import { toWebRequest, sendNodeResponse } from '@memoized-dom/adapters/node';
 import type { FullstackPluginApi } from './fullstack';
-import { isDocumentRequest, recoveryDocument, serverUpdateEvent } from './dev-recovery';
+import { developmentError, isDocumentRequest, recoveryDocument, serverUpdateEvent } from './dev-recovery';
 import { runWithDiagnosticSink } from '@memoized-dom/devtools/node';
 
 interface Backend {
@@ -223,7 +223,14 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
   };
   try {
     await vite.listen();
-    const initial = (await backend()).module.default;
+    // A mistake in the application's code must not stop the server. It starts with the defaults,
+    // pages show the error until the fix, and the next request loads the fixed backend.
+    let initial: BackendModule['default'] | Record<string, never> = {};
+    try {
+      initial = (await backend()).module.default;
+    } catch (error) {
+      vite.config.logger.error(developmentError(error).text);
+    }
     let origin: string;
     if (typeof Bun !== 'undefined') {
       // Hono has its own routes array: only native Bun options belong to the listener.

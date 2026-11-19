@@ -511,9 +511,15 @@ function cleanId(id: string): string {
   return id.replace(/[?#].*$/, '');
 }
 
-/** A compile error as Vite reports one: its message, file, line and column. */
+/**
+ * A compile error as Vite reports one: its message, file, line and column. The mistake is in the
+ * author's file, which Vite shows with its code frame, so the stack names none of the plugin's own
+ * frames (`at load (…/vite/dist/index.js)`), which say nothing about it.
+ */
 function viteError(error: CompileError, file: string): Error & { id: string; loc?: { file: string; line: number; column: number } } {
-  return Object.assign(new Error(error.message), {
+  const reported = new Error(error.message);
+  reported.stack = `Error: ${error.message}`;
+  return Object.assign(reported, {
     id: file,
     ...(error.line === undefined ? {} : { loc: { file, line: error.line, column: error.column ?? 0 } }),
   });
