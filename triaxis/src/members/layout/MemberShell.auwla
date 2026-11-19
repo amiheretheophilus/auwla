@@ -35,7 +35,7 @@ import { MemberHeader } from './MemberHeader.auwla';
 export function MemberShell({ member }: { member: Member }) {
   return (
     <div class="desk">
-      <MemberHeader member={member} />
+      <MemberHeader member=member />
       <main class="member-main">
         <slot />
         <p class="risk-note">"Trading involves risk. Signals are information, not financial advice, and past results do not promise future ones."</p>

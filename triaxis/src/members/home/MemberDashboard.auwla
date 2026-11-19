@@ -401,7 +401,7 @@ export function MemberDashboard({ home }: { home: MemberHome }) {
       <div class="title">
         <div>
           <p class="kicker">"Your signals"</p>
-          <h1 id="home-heading">"Welcome, " + firstName</h1>
+          <h1 id="home-heading">"Welcome, {firstName}"</h1>
         </div>
         <p>"Signals appear here for the axes you hold. A locked axis stays visible, ready to add."</p>
       </div>
@@ -413,7 +413,7 @@ export function MemberDashboard({ home }: { home: MemberHome }) {
             <p>accessLine(entry)</p>
             if (!entry.active) {
               <a class="unlock" route-to={{ path: '/subscribe', query: { plan: 'single-1m', axis: entry.axis } }}>
-                "Unlock " + entry.label <span aria-hidden="true">"→"</span>
+                "Unlock {entry.label}" <span aria-hidden="true">"→"</span>
               </a>
             }
           </li>
@@ -421,9 +421,9 @@ export function MemberDashboard({ home }: { home: MemberHome }) {
       </ul>
 
       if (latestPayment && latestPayment.status === 'pending') {
-        <p class="notice" data-status="pending">"Your payment for " + paymentPlanLabel(latestPayment.planId, latestPayment.axes) + " (reference " + latestPayment.reference + ") is " + paymentStatusLabels.pending.toLowerCase() + ". Access starts when an admin approves it."</p>
+        <p class="notice" data-status="pending">"Your payment for {paymentPlanLabel(latestPayment.planId, latestPayment.axes)} (reference {latestPayment.reference}) is {paymentStatusLabels.pending.toLowerCase()}. Access starts when an admin approves it."</p>
       } else if (latestPayment && latestPayment.status === 'rejected') {
-        <p class="notice" data-status="rejected">"Your payment " + latestPayment.reference + " was not approved. Check the reference and submit it again, or contact Triaxis."</p>
+        <p class="notice" data-status="rejected">"Your payment {latestPayment.reference} was not approved. Check the reference and submit it again, or contact Triaxis."</p>
       }
 
       <div class="feed-head">
@@ -447,20 +447,20 @@ export function MemberDashboard({ home }: { home: MemberHome }) {
         </div>
       } else if (latest) {
         <div class="latest">
-          <SignalEntry signal={latest} copied={copiedId === latest.id} onCopy={copyLevels} />
+          <SignalEntry signal=latest copied={copiedId === latest.id} onCopy=copyLevels />
         </div>
         if (earlier.length > 0) {
-          <h3 class="earlier-head">"Earlier signals · " + earlier.length</h3>
+          <h3 class="earlier-head">"Earlier signals · {earlier.length}"</h3>
           <ul class="earlier" aria-label="Earlier signals">
             for (const signal of earlier) {
               <li key={signal.id}>
                 <details class="older" data-axis={signal.card.axis}>
                   <summary>
-                    <strong>signal.card.symbol + " · " + signal.card.direction</strong>
-                    <time datetime={signal.publishedAt}>signal.id + " · " + formatSignalTime(signal.publishedAt)</time>
+                    <strong>"{signal.card.symbol} · {signal.card.direction}"</strong>
+                    <time datetime={signal.publishedAt}>"{signal.id} · {formatSignalTime(signal.publishedAt)}"</time>
                     <span class="older__toggle" aria-hidden="true"></span>
                   </summary>
-                  <SignalEntry signal={signal} copied={copiedId === signal.id} onCopy={copyLevels} />
+                  <SignalEntry signal=signal copied={copiedId === signal.id} onCopy=copyLevels />
                 </details>
               </li>
             }

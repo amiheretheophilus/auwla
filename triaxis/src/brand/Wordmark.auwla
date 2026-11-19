@@ -75,7 +75,7 @@
 /** The Triaxis mark and name, linking to `href`, with an optional area name such as "Desk". */
 export function Wordmark({ href, label, area = '' }: { href: string; label: string; area?: string }) {
   return (
-    <a class="wordmark" href={href} aria-label={label}>
+    <a class="wordmark" href=href aria-label=label>
       <span class="mark" aria-hidden="true">
         <span></span>
         <span></span>

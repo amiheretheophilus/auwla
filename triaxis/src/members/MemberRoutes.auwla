@@ -121,7 +121,7 @@ export function MemberApp() {
 
   return (
     <MemberShell member={home.member}>
-      <MemberDashboard home={home} />
+      <MemberDashboard home=home />
     </MemberShell>
   );
 }

@@ -150,9 +150,9 @@ export function PricePlan({ fields, targets, change, addTarget, removeTarget, se
               <label class="desk-label">
                 "Copied prices"
                 <textarea aria-describedby="bulk-prices-hint" rows={4} placeholder={'100\n95\n108\n112'}
-                  value={pasted} onInput={event => pasted = event.currentTarget.value} />
+                  value=pasted onInput={event => pasted = event.currentTarget.value} />
               </label>
-              <button class="desk-button desk-button--quiet" type="button" disabled={pasted.trim() === ''} onClick={applyLevels}>"Apply pasted prices"</button>
+              <button class="desk-button desk-button--quiet" type="button" disabled=(pasted.trim() === '') onClick=applyLevels>"Apply pasted prices"</button>
               if (pasteMessage) {
                 <p role="status">pasteMessage</p>
               }
@@ -161,7 +161,7 @@ export function PricePlan({ fields, targets, change, addTarget, removeTarget, se
         </div>
       </section>
 
-      <TakeProfitTargets targets={numberedTargets} addTarget={addTarget} removeTarget={removeTarget} setTarget={setTarget} />
+      <TakeProfitTargets targets=numberedTargets addTarget=addTarget removeTarget=removeTarget setTarget=setTarget />
     </>
   );
 }

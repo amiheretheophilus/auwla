@@ -167,7 +167,7 @@ import { PlanLink } from './PlanLink.auwla';
 export function PricingPage({ member, plans }: { member: Member | null; plans: Plan[] }) {
   return (
     <div class="desk">
-      <MemberHeader member={member} />
+      <MemberHeader member=member />
       <main class="pricing">
         <div class="intro">
           <p class="kicker">"Pricing"</p>
@@ -178,8 +178,8 @@ export function PricingPage({ member, plans }: { member: Member | null; plans: P
         <ul class="cards" aria-label="Plans">
           for (const plan of plans) {
             <li key={plan.id}>
-              <PlanCard plan={plan}>
-                <PlanLink slot="action" plan={plan} member={member !== null} />
+              <PlanCard plan=plan>
+                <PlanLink slot="action" plan=plan member=(member !== null) />
               </PlanCard>
             </li>
           }

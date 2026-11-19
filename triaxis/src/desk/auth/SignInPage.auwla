@@ -12,7 +12,7 @@ export function SignInPage({ enabled }: { enabled: boolean }) {
       title="Staff sign in"
       text="Approved analysts only. Use the staff email and password set up for you.">
       <DeskHeader slot="header" staff={null} />
-      <SignInForm enabled={enabled} />
+      <SignInForm enabled=enabled />
     </AuthSplit>
   );
 }

@@ -89,5 +89,5 @@ export function DeskSignIn() {
     return authConfigured();
   });
 
-  return <SignInPage enabled={enabled} />;
+  return <SignInPage enabled=enabled />;
 }

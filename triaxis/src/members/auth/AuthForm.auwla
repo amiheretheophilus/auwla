@@ -47,9 +47,9 @@ interface AuthFormProps {
  */
 export function AuthForm({ submit, pending, action, pendingAction, error }: AuthFormProps) {
   return (
-    <form class="auth-form" method="post" onSubmit={submit}>
+    <form class="auth-form" method="post" onSubmit=submit>
       <slot />
-      <button class="desk-button" type="submit" disabled={pending}>
+      <button class="desk-button" type="submit" disabled=pending>
         if (pending) {
           pendingAction
         } else {

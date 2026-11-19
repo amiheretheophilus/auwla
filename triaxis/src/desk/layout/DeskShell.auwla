@@ -34,7 +34,7 @@ import { DeskHeader } from './DeskHeader.auwla';
 export function DeskShell({ staff }: { staff: StaffMember }) {
   return (
     <div class="desk">
-      <DeskHeader staff={staff} />
+      <DeskHeader staff=staff />
       <main class="desk-main">
         <slot />
         <p class="risk-note">"Trading involves risk. Signals are for informational purposes only."</p>

@@ -1,6 +1,8 @@
 // Payments in version 1 (brief, section 5): the member pays by bank, mobile money or USDT and
 // submits the reference; an admin approves or rejects it, once. Approval adds the plan's time to
 // each axis it covers, on top of any access the member already holds.
+// Refusals are `error()` responses, so the page's `$forms` shows their message.
+import { error, type ErrorResponse } from '@memoized-dom/server';
 import { findPlan, isPaymentMethod, paymentMethods, planAxes } from '../../src/members/plans';
 import type { PaymentForReview, PaymentStatus, PaymentSummary } from '../../src/members/membership';
 import type { StaffMember } from '../../src/desk/analysis';
@@ -56,23 +58,29 @@ export function paymentInstructions() {
   }));
 }
 
+/** A refusal the member or admin should read, as the call's error. */
+function refuse(message: string, status: number): ErrorResponse {
+  return error({ message }, { status });
+}
+
 export function submitPayment(userId: string, planId: string, chosenAxis: string, method: string, rawReference: string) {
   const plan = findPlan(planId);
   if (!plan) {
-    return { ok: false, message: 'Choose a plan that is on sale.' } as const;
+    return refuse('Choose a plan that is on sale.', 400);
   }
 
   const covered = planAxes(plan, chosenAxis);
   if (covered.length === 0) {
-    return { ok: false, message: 'Choose the axis this plan is for.' } as const;
+    return refuse('Choose the axis this plan is for.', 400);
   }
+
   if (!isPaymentMethod(method)) {
-    return { ok: false, message: 'Choose how you paid.' } as const;
+    return refuse('Choose how you paid.', 400);
   }
 
   const reference = typeof rawReference === 'string' ? rawReference.trim() : '';
   if (reference.length < 3 || reference.length > 120) {
-    return { ok: false, message: 'Enter the payment reference, between 3 and 120 characters.' } as const;
+    return refuse('Enter the payment reference, between 3 and 120 characters.', 400);
   }
 
   const database = deskDatabase();
@@ -80,8 +88,9 @@ export function submitPayment(userId: string, planId: string, chosenAxis: string
     const waiting = database.query<{ count: number }, [string]>(`
       SELECT COUNT(*) AS count FROM payments WHERE user_id = ? AND status = 'pending'
     `).get(userId)?.count ?? 0;
+
     if (waiting >= pendingLimit) {
-      return { ok: false, message: `You already have ${waiting} payments waiting for approval. Wait for those to be checked first.` } as const;
+      return refuse(`You already have ${waiting} payments waiting for approval. Wait for those to be checked first.`, 429);
     }
 
     const row = database.query<PaymentRow, [string, string, string, number, number, string, string, string]>(`
@@ -93,7 +102,7 @@ export function submitPayment(userId: string, planId: string, chosenAxis: string
       throw new Error('Saving the payment did not return it');
     }
 
-    return { ok: true, payment: summaryOf(row) } as const;
+    return summaryOf(row);
   }).immediate();
 }
 
@@ -135,10 +144,11 @@ export function addMonths(start: string, months: number): string {
 
 export function decidePayment(id: number, decision: 'approved' | 'rejected', admin: StaffMember) {
   if (admin.role !== 'admin') {
-    return { ok: false, message: 'Only an admin can decide payments.' } as const;
+    return refuse('Only an admin can decide payments.', 403);
   }
+
   if (!Number.isSafeInteger(id) || id < 1) {
-    return { ok: false, message: 'That payment does not exist.' } as const;
+    return refuse('That payment does not exist.', 404);
   }
 
   const database = deskDatabase();
@@ -151,7 +161,7 @@ export function decidePayment(id: number, decision: 'approved' | 'rejected', adm
       RETURNING *
     `).get(decision, admin.id, now, id);
     if (!row) {
-      return { ok: false, message: 'This payment was already decided.' } as const;
+      return refuse('This payment was already decided.', 409);
     }
 
     if (decision === 'approved') {
@@ -168,6 +178,6 @@ export function decidePayment(id: number, decision: 'approved' | 'rejected', adm
       }
     }
 
-    return { ok: true } as const;
+    return summaryOf(row);
   }).immediate();
 }

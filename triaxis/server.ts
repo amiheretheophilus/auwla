@@ -1,10 +1,10 @@
 import { serve } from '@memoized-dom/server';
-import { define } from './server/define';
+import { define, emptyRequestState } from './server/define';
 import { databaseIsReady } from './server/database';
 import { authRoutes, leaveDesk, leaveMembers } from './server/auth/routes';
 import { App } from './src/App.auwla';
 
-const app = serve({ define });
+const app = serve({ define, state: emptyRequestState });
 
 app.get('/healthz', () => Response.json({ ok: true }, {
   headers: { 'Cache-Control': 'no-store' },
@@ -49,6 +49,7 @@ app.use('/sign-up', privateResponse);
 app.use('/_memoized/routed', privateResponse);
 app.use('/_fn/desk/*', privateResponse);
 app.use('/_fn/members/*', privateResponse);
+app.use('/_fn/payments/*', privateResponse);
 app.post('/api/auth/*', ({ request }) => authRoutes.fetch(request));
 app.post('/desk/sign-out', ({ request }) => leaveDesk(request));
 app.post('/sign-out', ({ request }) => leaveMembers(request));

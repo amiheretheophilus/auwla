@@ -34,26 +34,25 @@ function planQuery(plan: string): Record<string, string> {
 }
 
 export function MemberSignInForm({ plan }: { plan: string }) {
-  const form = $forms((fields: FormData) => {
-    const request = memberLogin(String(fields.get('email') ?? '').trim(), String(fields.get('password') ?? ''));
-    $track(form).onSuccess(result => {
-      // Staff open the desk. A member who picked a plan carries on to pay for it; any other
-      // member goes to their signals.
-      if ('staff' in result && result.staff) {
-        navigate('/desk', { replace: true });
-      } else if (plan) {
-        navigate('/subscribe', { replace: true, query: planQuery(plan) });
-      } else {
-        navigate('/signals', { replace: true });
-      }
-    });
-    return request;
+  const form = $forms(async (fields: FormData) => {
+    const signedIn = await memberLogin(String(fields.get('email') ?? '').trim(), String(fields.get('password') ?? ''));
+
+    // Staff open the desk. A member who picked a plan carries on to pay for it; any other
+    // member goes to their signals.
+    if (signedIn.staff) {
+      navigate('/desk', { replace: true });
+    } else if (plan) {
+      navigate('/subscribe', { replace: true, query: planQuery(plan) });
+    } else {
+      navigate('/signals', { replace: true });
+    }
+    return signedIn;
   });
 
   const error = formError(form.errors.length > 0, form.errors[0]?.message, 'Sign-in failed. Try again.');
 
   return (
-    <AuthForm submit={form.submit} pending={form.pending} action="Sign in" pendingAction="Signing in…" error={error}>
+    <AuthForm submit={form.submit} pending={form.pending} action="Sign in" pendingAction="Signing in…" error=error>
       <label class="desk-label">
         "Email"
         <input name="email" type="email" autocomplete="username" maxlength={254} placeholder="you@example.com" required />
@@ -65,22 +64,20 @@ export function MemberSignInForm({ plan }: { plan: string }) {
 }
 
 export function MemberSignUpForm({ plan }: { plan: string }) {
-  const form = $forms((fields: FormData) => {
-    const request = signUp(
+  const form = $forms(async (fields: FormData) => {
+    const signedUp = await signUp(
       String(fields.get('name') ?? '').trim(),
       String(fields.get('email') ?? '').trim(),
       String(fields.get('password') ?? ''),
     );
-    $track(form).onSuccess(() => {
-      navigate('/subscribe', { replace: true, query: planQuery(plan) });
-    });
-    return request;
+    navigate('/subscribe', { replace: true, query: planQuery(plan) });
+    return signedUp;
   });
 
   const error = formError(form.errors.length > 0, form.errors[0]?.message, 'Sign-up failed. Try again.');
 
   return (
-    <AuthForm submit={form.submit} pending={form.pending} action="Create account" pendingAction="Creating account…" error={error}>
+    <AuthForm submit={form.submit} pending={form.pending} action="Create account" pendingAction="Creating account…" error=error>
       <label class="desk-label">
         "Full name"
         <input name="name" autocomplete="name" minlength={2} maxlength={80} placeholder="Ama Mensah" required />

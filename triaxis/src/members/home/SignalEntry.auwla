@@ -61,11 +61,11 @@ import { SignalCardPreview } from '../../signals/SignalCardPreview.auwla';
 export function SignalEntry({ signal, copied, onCopy }: { signal: PublishedSignal; copied: boolean; onCopy: (signal: PublishedSignal) => void }) {
   return (
     <article class="entry" aria-label={signal.id}>
-      <SignalCardPreview card={signal.card} review={postedReview} signalId={signal.id} publishedAt={signal.publishedAt} />
+      <SignalCardPreview card={signal.card} review=postedReview signalId={signal.id} publishedAt={signal.publishedAt} />
       <div class="levels">
         <div>
-          <h3>signal.card.symbol + " · " + signal.card.direction</h3>
-          <time datetime={signal.publishedAt}>signal.id + " · " + formatSignalTime(signal.publishedAt)</time>
+          <h3>"{signal.card.symbol} · {signal.card.direction}"</h3>
+          <time datetime={signal.publishedAt}>"{signal.id} · {formatSignalTime(signal.publishedAt)}"</time>
         </div>
         <pre aria-label={'Levels for ' + signal.id}>levelsText(signal.card)</pre>
         <button class="desk-button desk-button--quiet" type="button" onClick={() => onCopy(signal)}>

@@ -118,7 +118,7 @@ export function TakeProfitTargets({ targets, addTarget, removeTarget, setTarget 
             </li>
           }
         </ol>
-        <button class="desk-button desk-button--quiet add" type="button" onClick={addTarget}>"+ Add target"</button>
+        <button class="desk-button desk-button--quiet add" type="button" onClick=addTarget>"+ Add target"</button>
       </div>
     </section>
   );

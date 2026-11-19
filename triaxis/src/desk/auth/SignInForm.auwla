@@ -46,14 +46,12 @@ import { PasswordField } from '../../auth/PasswordField.auwla';
 </style>
 
 export function SignInForm({ enabled }: { enabled: boolean }) {
-  const form = $forms((fields: FormData) => {
+  const form = $forms(async (fields: FormData) => {
     const email = String(fields.get('email') ?? '').trim();
     const password = String(fields.get('password') ?? '');
-    const request = login(email, password);
-    $track(form).onSuccess(() => {
-      navigate('/desk', { replace: true });
-    });
-    return request;
+    const signedIn = await login(email, password);
+    navigate('/desk', { replace: true });
+    return signedIn;
   });
 
   return (

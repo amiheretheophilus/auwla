@@ -309,7 +309,7 @@ function heldLine(entry: AxisAccess | undefined): string {
   if (entry.expiresAt === null) {
     return 'Lifetime access';
   }
-  return 'Held until ' + formatDay(entry.expiresAt) + '. Time is added on top.';
+  return `Held until ${formatDay(entry.expiresAt)}. Time is added on top.`;
 }
 
 export function SubscribePage({ plans, chosen, chosenAxis, access, instructions, payments }: SubscribeProps) {
@@ -344,12 +344,10 @@ export function SubscribePage({ plans, chosen, chosenAxis, access, instructions,
     event.currentTarget.querySelector('input')?.focus({ preventScroll: true });
   }
 
-  const claim = $forms((fields: FormData) => {
-    const request = claimPayment(planId, axis, method, String(fields.get('reference') ?? ''));
-    $track(claim).onSuccess(outcome => {
-      if (outcome.ok) submitted = true;
-    });
-    return request;
+  const claim = $forms(async (fields: FormData) => {
+    const payment = await claimPayment(planId, axis, method, String(fields.get('reference') ?? ''));
+    submitted = true;
+    return payment;
   });
 
   return (
@@ -363,7 +361,7 @@ export function SubscribePage({ plans, chosen, chosenAxis, access, instructions,
       if (submitted) {
         <div class="done" role="status">
           <h2>"Payment submitted"</h2>
-          <p>summary + ". We will check the reference and open your access once it is approved."</p>
+          <p>"{summary}. We will check the reference and open your access once it is approved."</p>
           <a class="desk-button" route-to="/signals">"Back to your signals"</a>
         </div>
       } else {
@@ -379,7 +377,7 @@ export function SubscribePage({ plans, chosen, chosenAxis, access, instructions,
                 for (const option of plans) {
                   <label key={option.id} class="plan-pick" onClick={(event) => pickPlan(event, option.id)}>
                     <input class="visually-hidden" type="radio" name="plan" value={option.id} checked={planId === option.id} onChange={() => planId = option.id} />
-                    <PlanCard plan={option} selected={planId === option.id}>
+                    <PlanCard plan=option selected={planId === option.id}>
                       if (planId === option.id) {
                         <span slot="action" class="pick-state" data-picked="true">"✓ Selected"</span>
                       } else {
@@ -428,7 +426,7 @@ export function SubscribePage({ plans, chosen, chosenAxis, access, instructions,
                 }
               </fieldset>
               if (instruction && instruction.details) {
-                <p class="details"><strong>"Pay " + paymentMethodLabel(method) + " to"</strong> instruction.details</p>
+                <p class="details"><strong>"Pay {paymentMethodLabel(method)} to"</strong> instruction.details</p>
               } else {
                 <p class="details" data-missing="true">"The payment details for this method are not published yet. Contact Triaxis for them before paying."</p>
               }
@@ -442,7 +440,7 @@ export function SubscribePage({ plans, chosen, chosenAxis, access, instructions,
             </div>
             <div class="reference">
               if (plan) {
-                <p class="summary">"You are paying " <strong>"$" + plan.price</strong> " for " + summary + "."</p>
+                <p class="summary">"You are paying " <strong>"${plan.price}"</strong> " for {summary}."</p>
               }
               <label class="desk-label">
                 "Payment reference"
@@ -452,17 +450,15 @@ export function SubscribePage({ plans, chosen, chosenAxis, access, instructions,
           </section>
 
           <div class="actions">
-            <button class="desk-button" type="submit" disabled={claim.pending || !plan}>
+            <button class="desk-button" type="submit" disabled=(claim.pending || !plan)>
               if (claim.pending) {
                 "Submitting…"
               } else {
                 "Submit payment"
               }
             </button>
-            if (claim.result && !claim.result.ok) {
-              <p role="alert">claim.result.message</p>
-            } else if (claim.errors.length > 0) {
-              <p role="alert">"The payment could not be submitted. Check your session and try again."</p>
+            if (claim.errors.length > 0) {
+              <p role="alert">claim.errors[0]?.message</p>
             }
           </div>
         </form>
@@ -474,7 +470,7 @@ export function SubscribePage({ plans, chosen, chosenAxis, access, instructions,
           <ul>
             for (const payment of payments) {
               <li key={payment.id}>
-                <span>"$" + payment.amount + " · " + payment.axes.map(axisLabel).join(', ') + " · " + monthsText(payment.months) + " · " + paymentMethodLabel(payment.method) + " " + payment.reference</span>
+                <span>"${payment.amount} · {payment.axes.map(axisLabel).join(', ')} · {monthsText(payment.months)} · {paymentMethodLabel(payment.method)} {payment.reference}"</span>
                 <span data-status={payment.status}>paymentStatusLabels[payment.status]</span>
                 <span>formatDay(payment.createdAt)</span>
               </li>

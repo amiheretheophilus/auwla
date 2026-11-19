@@ -46,9 +46,9 @@ export function TradeDetails({ fields, change }: TradeDetailsProps) {
       <div class="instrument-grid">
         <label class="desk-label">
           "Market"
-          <select name="axis" onChange={chooseMarket}>
+          <select name="axis" onChange=chooseMarket>
             for (const option of axes) {
-              <option key={option} value={option} selected={fields.axis === option}>markets[option].label</option>
+              <option key=option value=option selected={fields.axis === option}>markets[option].label</option>
             }
           </select>
         </label>
@@ -57,7 +57,7 @@ export function TradeDetails({ fields, change }: TradeDetailsProps) {
           <select name="symbol" onChange={(event) => change('symbol', event.currentTarget.value)}>
             <option value="" selected={fields.symbol === ''}>"Choose an asset"</option>
             for (const option of symbols) {
-              <option key={option} value={option} selected={fields.symbol === option}>option</option>
+              <option key=option value=option selected={fields.symbol === option}>option</option>
             }
           </select>
         </label>

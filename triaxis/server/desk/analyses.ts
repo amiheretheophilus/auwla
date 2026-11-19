@@ -2,6 +2,8 @@
 // on every save and again inside the posting transaction, so what the browser shows is never the
 // authority. Posting writes a published_signals row whose UNIQUE (workspace, draft_revision)
 // key makes a repeated Post return the first signal instead of making a second one.
+// Refusals are `error()` responses, so a caller's `$forms` shows their message.
+import { error, type ErrorResponse } from '@memoized-dom/server';
 import {
   canEdit,
   statusOf,
@@ -119,11 +121,16 @@ export function listAuthors(viewer: StaffMember): StaffMember[] {
 
 export function loadAnalysis(id: number): AnalysisDetail | null {
   if (!Number.isSafeInteger(id) || id < 1) return null;
-  const row = deskDatabase().query<AnalysisRow, [number]>(`${selectAnalyses} WHERE a.id = ?`).get(id);
+
+  const row = deskDatabase()
+    .query<AnalysisRow, [number]>(`${selectAnalyses} WHERE a.id = ?`)
+    .get(id);
+
   if (!row) return null;
 
   const { fields, review } = reviewOf(row);
   const published = publicationOf(row);
+
   return {
     id: row.id,
     author: authorOf(row),
@@ -139,37 +146,62 @@ export function loadAnalysis(id: number): AnalysisDetail | null {
 
 export function createAnalysis(author: StaffMember) {
   const now = new Date().toISOString();
+
   const fields = { ...emptyFields, targets: [...emptyFields.targets] };
+
   const row = deskDatabase().query<{ id: number }, [string, string, string, string, string]>(`
     INSERT INTO analyses (author_id, revision, fields, verdict, created_at, updated_at)
     VALUES (?, 1, ?, ?, ?, ?)
     RETURNING id
   `).get(author.id, JSON.stringify(fields), inspectSignal(fields).verdict, now, now);
-  if (!row) throw new Error('Creating the analysis did not return an id');
-  return { ok: true, id: row.id } as const;
+
+  if (!row)
+      throw new Error('Creating the analysis did not return an id');
+
+  return {
+    id: row.id
+  };
 }
 
-/** Why `editor` cannot change analysis `detail`, or null when they can. */
-function editBlock(detail: AnalysisDetail | null, editor: StaffMember): string | null {
-  if (!detail) return 'This analysis no longer exists.';
-  if (!canEdit(editor, detail.author)) return `Only ${detail.author.name} or an admin can change this analysis.`;
-  if (detail.published) return `This analysis was posted as ${detail.published.id} and can no longer change.`;
+function missingAnalysis(): ErrorResponse {
+  return error({ message: 'This analysis no longer exists.' }, { status: 404 });
+}
+
+/** The failure that stops `editor` changing analysis `detail`, or null when they can. */
+function editBlock(detail: AnalysisDetail, editor: StaffMember): ErrorResponse | null {
+  if (!canEdit(editor, detail.author))
+    return error({ message: `Only ${detail.author.name} or an admin can change this analysis.` }, { status: 403 });
+  if (detail.published)
+    return error({ message: `This analysis was posted as ${detail.published.id} and can no longer change.` }, { status: 409 });
+
   return null;
 }
 
 export function saveAnalysis(id: number, revision: number, input: unknown, editor: StaffMember) {
   const fields = readSignalFields(input);
+
   if (!fields || !Number.isSafeInteger(revision) || revision < 1) {
-    return { ok: false, message: 'The analysis has invalid fields. Check the selected market and values.' } as const;
+    return error(
+      { message: 'The analysis has invalid fields. Check the selected market and values.' },
+      { status: 400 },
+    );
   }
+
   if (!isOptionalRiskPercentage(fields.risk)) {
-    return { ok: false, message: 'Enter risk as a non-negative number or leave it blank.' } as const;
+    return error(
+      { message: 'Enter risk as a non-negative number or leave it blank.' },
+      { status: 400 },
+    );
   }
 
   const database = deskDatabase();
+
   return database.transaction(() => {
-    const blocked = editBlock(loadAnalysis(id), editor);
-    if (blocked) return { ok: false, message: blocked } as const;
+    const detail = loadAnalysis(id);
+    if (!detail) return missingAnalysis();
+
+    const blocked = editBlock(detail, editor);
+    if (blocked) return blocked;
 
     const review = inspectSignal(fields);
     // The revision is checked in the same statement, so a stale tab cannot overwrite newer work.
@@ -177,11 +209,15 @@ export function saveAnalysis(id: number, revision: number, input: unknown, edito
       UPDATE analyses SET revision = revision + 1, fields = ?, verdict = ?, updated_at = ?
       WHERE id = ? AND revision = ?
     `).run(JSON.stringify(fields), review.verdict, new Date().toISOString(), id, revision);
+
     if (result.changes !== 1) {
-      return { ok: false, message: 'Someone saved a newer version of this analysis. Copy any unsaved changes, then reload.' } as const;
+      return error(
+        { message: 'Someone saved a newer version of this analysis. Copy any unsaved changes, then reload.' },
+        { status: 409 },
+      );
     }
 
-    return { ok: true, analysis: loadAnalysis(id)! } as const;
+    return loadAnalysis(id)!;
   }).immediate();
 }
 
@@ -197,15 +233,24 @@ export function publishAnalysis(id: number, revision: number, publisher: StaffMe
   // The checks, the revision and the write share one write lock.
   return database.transaction(() => {
     const detail = loadAnalysis(id);
-    if (detail?.published) return { ok: true, analysis: detail } as const;
+
+    if (!detail) return missingAnalysis();
+
+    // Posting twice returns the first signal.
+    if (detail.published) return detail;
 
     const blocked = editBlock(detail, publisher);
-    if (blocked || !detail) return { ok: false, message: blocked ?? 'This analysis no longer exists.' } as const;
+    if (blocked) return blocked;
+
     if (detail.revision !== revision) {
-      return { ok: false, message: 'The analysis changed since you opened it. Reload to post the latest version.' } as const;
+      return error(
+        { message: 'The analysis changed since you opened it. Reload to post the latest version.' },
+        { status: 409 },
+      );
     }
+
     if (detail.review.verdict !== 'Price checks complete') {
-      return { ok: false, message: postBlock(detail.review) } as const;
+      return error({ message: postBlock(detail.review) }, { status: 422 });
     }
 
     database.query(`
@@ -214,6 +259,6 @@ export function publishAnalysis(id: number, revision: number, publisher: StaffMe
       ON CONFLICT (workspace, draft_revision) DO NOTHING
     `).run(workspaceOf(id), revision, JSON.stringify(signalCardFromDraft(detail.fields)), new Date().toISOString(), publisher.id);
 
-    return { ok: true, analysis: loadAnalysis(id)! } as const;
+    return loadAnalysis(id)!;
   }).immediate();
 }

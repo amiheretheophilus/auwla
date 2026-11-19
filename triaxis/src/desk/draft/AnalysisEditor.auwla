@@ -2,6 +2,7 @@ import { postAnalysis, saveAnalysisDraft } from '#server-functions';
 import { analysisLabel, canEdit, statusLabels, type AnalysisDetail, type StaffMember } from '../analysis';
 import { StaffBadge } from '../StaffBadge.auwla';
 import { inspectSignal, readSignalFields } from './model/signal-checks';
+import type { SignalFields } from './model/signal-fields';
 import type { SignalReview } from './model/signal-review';
 import { signalCardFromDraft } from '../../signals/signal-card';
 import { SignalCardPreview } from '../../signals/SignalCardPreview.auwla';
@@ -382,6 +383,9 @@ const updatedFormat = new Intl.DateTimeFormat('en-GB', {
 });
 
 /** Shown when a field is longer than the server accepts, so no checks can run. */
+/** Every field the analyst types except the targets, which are keyed rows. */
+type DraftFields = Omit<SignalFields, 'targets'>;
+
 const invalidReview: SignalReview = {
   checks: [{ label: 'Fields', status: 'fail', detail: 'A value is too long or not allowed for this market.' }],
   missing: [],
@@ -392,52 +396,47 @@ export function AnalysisEditor({ staff, initial }: { staff: StaffMember; initial
   // The last version the server confirmed. Saving and posting replace it.
   let saved = initial;
 
-  let axis = initial.fields.axis;
-  let symbol = initial.fields.symbol;
-  let direction = initial.fields.direction;
-  let entryType = initial.fields.entryType;
-  let entry = initial.fields.entry;
-  let stop = initial.fields.stop;
-  let risk = initial.fields.risk;
-  let note = initial.fields.note;
-  let targets: TargetRow[] = initial.fields.targets.map((value, id) => ({ id, value }));
+  // What the analyst is typing: one object for the fields, and the targets as keyed rows.
+  const { targets: initialTargets, ...initialFields } = initial.fields;
+  const fields: DraftFields = { ...initialFields };
+  const targets: TargetRow[] = initialTargets.map((value, id) => ({ id, value }));
   let nextTargetId = targets.length;
 
   const editable = canEdit(staff, saved.author) && saved.published === null;
 
   // What the analyst has typed, checked in the browser with the server's own rules.
-  const typed = { axis, symbol, direction, entryType, entry, stop, risk, note, targets: targets.map(row => row.value) };
+  const typed: SignalFields = { ...fields, targets: targets.map(row => row.value) };
   const live = readSignalFields(typed);
   const liveReview = live ? inspectSignal(live) : invalidReview;
   const unsaved = JSON.stringify(live) !== JSON.stringify(saved.fields);
   const card = saved.published ? saved.published.card : signalCardFromDraft(live ?? saved.fields);
 
-  function change(name: 'axis' | 'symbol' | 'direction' | 'entryType' | 'entry' | 'stop' | 'risk', value: string) {
-    if (name === 'axis') axis = value;
-    else if (name === 'symbol') symbol = value;
-    else if (name === 'direction') direction = value;
-    else if (name === 'entryType') entryType = value;
-    else if (name === 'entry') entry = value;
-    else if (name === 'stop') stop = value;
-    else risk = value;
+  function change(name: keyof DraftFields, value: string) {
+    fields[name] = value;
   }
 
   function addTarget() {
-    targets = [...targets, { id: nextTargetId++, value: '' }];
+    targets.push({ id: nextTargetId++, value: '' });
   }
 
   function removeTarget(id: number) {
-    if (targets.length > 1) targets = targets.filter(row => row.id !== id);
+    const index = targets.findIndex(row => row.id === id);
+    if (targets.length > 1 && index !== -1) {
+      targets.splice(index, 1);
+    }
   }
 
   function setTarget(id: number, value: string) {
-    targets = targets.map(row => row.id === id ? { id, value } : row);
+    const row = targets.find(candidate => candidate.id === id);
+    if (row) {
+      row.value = value;
+    }
   }
 
   function fillLevels(nextEntry: string, nextStop: string, nextTargets: string[]) {
-    entry = nextEntry;
-    stop = nextStop;
-    targets = nextTargets.map(value => ({ id: nextTargetId++, value }));
+    fields.entry = nextEntry;
+    fields.stop = nextStop;
+    targets.splice(0, targets.length, ...nextTargets.map(value => ({ id: nextTargetId++, value })));
   }
 
   // The checks dialog. Saving opens it to show what the server found; "See checks" reopens it.
@@ -453,21 +452,15 @@ export function AnalysisEditor({ staff, initial }: { staff: StaffMember; initial
     checksDialog?.close();
   }
 
-  const save = $forms(() => {
+  const save = $forms(async () => {
     openChecks('save');
-    const request = saveAnalysisDraft(saved.id, saved.revision, typed);
-    $track(save).onSuccess(outcome => {
-      if (outcome.ok) saved = outcome.analysis;
-    });
-    return request;
+    saved = await saveAnalysisDraft(saved.id, saved.revision, typed);
+    return saved;
   });
 
-  const post = $forms(() => {
-    const request = postAnalysis(saved.id, saved.revision);
-    $track(post).onSuccess(outcome => {
-      if (outcome.ok) saved = outcome.analysis;
-    });
-    return request;
+  const post = $forms(async () => {
+    saved = await postAnalysis(saved.id, saved.revision);
+    return saved;
   });
 
   // Why Post is not available yet, or '' when it is. The server decides again when it runs.
@@ -488,7 +481,7 @@ export function AnalysisEditor({ staff, initial }: { staff: StaffMember; initial
   }
 
   const saving = dialogMode === 'save' && save.pending;
-  const saveFailed = dialogMode === 'save' && !save.pending && ((save.result !== undefined && !save.result.ok) || save.errors.length > 0);
+  const saveFailed = dialogMode === 'save' && !save.pending && save.errors.length > 0;
 
   let dialogTitle: 'Checking…' | 'Not saved' | 'Posted' | 'Ready to post' | 'Rejected' | 'Not ready yet' = 'Not ready yet';
   if (saving) {
@@ -523,24 +516,24 @@ export function AnalysisEditor({ staff, initial }: { staff: StaffMember; initial
             <code>analysisLabel(saved.id)</code>
             <StaffBadge member={saved.author} />
             <span class="status" data-status={saved.status}>statusLabels[saved.status]</span>
-            <span>"Updated " + updatedFormat.format(new Date(saved.updatedAt)) + " UTC"</span>
+            <span>"Updated {updatedFormat.format(new Date(saved.updatedAt))} UTC"</span>
           </p>
         </div>
       </div>
 
       if (saved.published) {
-        <p class="notice">"Posted as " + saved.published.id + " on " + updatedFormat.format(new Date(saved.published.publishedAt)) + " UTC. A posted analysis can no longer change."</p>
+        <p class="notice">"Posted as {saved.published.id} on {updatedFormat.format(new Date(saved.published.publishedAt))} UTC. A posted analysis can no longer change."</p>
       } else if (!editable) {
-        <p class="notice">"Read only. " + saved.author.name + " wrote this analysis; only they or an admin can change or post it."</p>
+        <p class="notice">"Read only. {saved.author.name} wrote this analysis; only they or an admin can change or post it."</p>
       }
 
       <div class="editor">
         <form class="draft-form" onSubmit={save.submit}>
-          <fieldset class="fields" disabled={!editable}>
+          <fieldset class="fields" disabled=(!editable)>
             <legend class="visually-hidden">"Analysis fields"</legend>
-            <TradeDetails fields={{ axis, symbol, direction, entryType }} change={change} />
-            <PricePlan fields={{ entry, stop, risk }} targets={targets} change={change}
-              addTarget={addTarget} removeTarget={removeTarget} setTarget={setTarget} fillLevels={fillLevels} />
+            <TradeDetails fields=fields change=change />
+            <PricePlan fields=fields targets=targets change=change
+              addTarget=addTarget removeTarget=removeTarget setTarget=setTarget fillLevels=fillLevels />
 
             <section class="desk-row" aria-labelledby="note-heading">
               <div class="desk-row__head">
@@ -549,7 +542,7 @@ export function AnalysisEditor({ staff, initial }: { staff: StaffMember; initial
               </div>
               <div>
                 <textarea name="note" aria-labelledby="note-heading" aria-describedby="note-hint" rows={3} maxlength={500}
-                  value={note} onInput={event => note = event.currentTarget.value} />
+                  value={fields.note} onInput={event => fields.note = event.currentTarget.value} />
                 <p class="note-hint" id="note-hint">"Up to 500 characters."</p>
               </div>
             </section>
@@ -582,20 +575,18 @@ export function AnalysisEditor({ staff, initial }: { staff: StaffMember; initial
                 <span>"Updates as you type"</span>
               }
             </div>
-            <SignalCardPreview card={card} review={editable ? liveReview : saved.review}
+            <SignalCardPreview card=card review={editable ? liveReview : saved.review}
               signalId={saved.published?.id ?? null} publishedAt={saved.published?.publishedAt ?? null} />
             if (saved.published) {
-              <p class="posted" role="status">"Posted as " + saved.published.id + ". Members who hold this axis can see it."</p>
+              <p class="posted" role="status">"Posted as {saved.published.id}. Members who hold this axis can see it."</p>
             } else if (canEdit(staff, saved.author)) {
               <form onSubmit={post.submit}>
-                <button class="desk-button" type="submit" disabled={postBlock !== '' || post.pending}>
+                <button class="desk-button" type="submit" disabled=(postBlock !== '' || post.pending)>
                   post.pending ? "Posting…" : "Post signal"
                 </button>
               </form>
-              if (post.result && !post.result.ok) {
-                <p role="alert">post.result.message</p>
-              } else if (post.errors.length > 0) {
-                <p role="alert">"The signal could not be posted. Check your session and try again."</p>
+              if (post.errors.length > 0) {
+                <p role="alert">post.errors[0]?.message</p>
               } else if (postBlock) {
                 <p class="blocked" data-tone={firstFailure && !unsaved ? 'rejected' : 'waiting'}>postBlock</p>
               } else {
@@ -608,22 +599,20 @@ export function AnalysisEditor({ staff, initial }: { staff: StaffMember; initial
         </aside>
       </div>
 
-      <dialog class="checks-dialog" ref={checksDialog} aria-labelledby="checks-dialog-title">
+      <dialog class="checks-dialog" ref=checksDialog aria-labelledby="checks-dialog-title">
         <header class="dialog-head">
           <div>
-            <p class="dialog-kicker">analysisLabel(saved.id) + " · " + (saved.fields.symbol || "Untitled analysis")</p>
+            <p class="dialog-kicker">"{analysisLabel(saved.id)} · {saved.fields.symbol || 'Untitled analysis'}"</p>
             <h2 id="checks-dialog-title" data-tone={saveFailed ? 'rejected' : saved.status}>dialogTitle</h2>
           </div>
-          <button class="dialog-close" type="button" aria-label="Close" onClick={closeChecks}>"×"</button>
+          <button class="dialog-close" type="button" aria-label="Close" onClick=closeChecks>"×"</button>
         </header>
 
         <div class="dialog-body">
           if (saving) {
             <p class="dialog-wait" role="status">"Saving and running the checks…"</p>
-          } else if (saveFailed && save.result && !save.result.ok) {
-            <p class="dialog-error" role="alert">save.result.message</p>
           } else if (saveFailed) {
-            <p class="dialog-error" role="alert">"The analysis could not be saved. Check your session and try again."</p>
+            <p class="dialog-error" role="alert">save.errors[0]?.message</p>
           } else {
             <SignalChecks review={saved.review} title="Saved checks" caption="Checked by the server" />
           }
@@ -631,7 +620,7 @@ export function AnalysisEditor({ staff, initial }: { staff: StaffMember; initial
 
         <footer class="dialog-actions">
           if (saved.published) {
-            <p class="posted" role="status">"Posted as " + saved.published.id + "."</p>
+            <p class="posted" role="status">"Posted as {saved.published.id}."</p>
           } else if (!saving && !saveFailed) {
             if (postBlock === '') {
               <form onSubmit={post.submit}>
@@ -644,10 +633,10 @@ export function AnalysisEditor({ staff, initial }: { staff: StaffMember; initial
               <p>postBlock</p>
             }
           }
-          if (post.result && !post.result.ok) {
-            <p class="dialog-error" role="alert">post.result.message</p>
+          if (post.errors.length > 0) {
+            <p class="dialog-error" role="alert">post.errors[0]?.message</p>
           }
-          <button class="desk-button desk-button--quiet" type="button" onClick={closeChecks}>
+          <button class="desk-button desk-button--quiet" type="button" onClick=closeChecks>
             saved.published ? "Close" : "Keep editing"
           </button>
         </footer>

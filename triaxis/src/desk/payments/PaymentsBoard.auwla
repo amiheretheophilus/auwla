@@ -236,7 +236,7 @@ function filterLabel(filter: PaymentStatus | 'all'): string {
 
 /** `/desk/payments`: admins approve or reject what members say they paid. */
 export function PaymentsBoard({ staff, initial }: { staff: StaffMember; initial: PaymentForReview[] }) {
-  let payments = initial;
+  const payments = initial;
   let filter: PaymentStatus | 'all' = 'pending';
   let busyId = 0;
   let message = '';
@@ -244,27 +244,25 @@ export function PaymentsBoard({ staff, initial }: { staff: StaffMember; initial:
   const visible = payments.filter(payment => filter === 'all' || payment.status === filter);
   const countOf = (value: PaymentStatus | 'all') => payments.filter(payment => value === 'all' || payment.status === value).length;
 
-  async function decide(id: number, decision: 'approved' | 'rejected') {
+  async function decide(payment: PaymentForReview, decision: 'approved' | 'rejected') {
     // A second click lands before the buttons redraw as disabled; the first one is enough.
     // The server decides a payment once either way.
     if (busyId !== 0) {
       return;
     }
-    busyId = id;
+
+    busyId = payment.id;
     message = '';
-    const outcome = await decideMemberPayment(id, decision);
-    busyId = 0;
-    if (!outcome.ok) {
-      message = outcome.message;
-      return;
+    try {
+      const decided = await decideMemberPayment(payment.id, decision);
+      payment.status = decided.status;
+      payment.decidedAt = decided.decidedAt;
+      payment.decidedBy = staff.name;
+    } catch (failure) {
+      message = (failure as Error).message;
+    } finally {
+      busyId = 0;
     }
-    const decidedAt = new Date().toISOString();
-    payments = payments.map(payment => {
-      if (payment.id !== id) {
-        return payment;
-      }
-      return { ...payment, status: decision, decidedAt, decidedBy: staff.name };
-    });
   }
 
   return (
@@ -279,7 +277,7 @@ export function PaymentsBoard({ staff, initial }: { staff: StaffMember; initial:
 
       <ul class="tabs" aria-label="Status">
         for (const value of filters) {
-          <li key={value}>
+          <li key=value>
             <button class="tab" type="button" aria-pressed={filter === value} onClick={() => filter = value}>
               filterLabel(value) <small>countOf(value)</small>
             </button>
@@ -302,20 +300,20 @@ export function PaymentsBoard({ staff, initial }: { staff: StaffMember; initial:
                 <span>payment.member.email</span>
               </div>
               <div class="what">
-                <strong>"$" + payment.amount + " · " + payment.axes.map(axisLabel).join(', ')</strong>
-                <span>monthsText(payment.months) + " · " + paymentMethodLabel(payment.method)</span>
+                <strong>"${payment.amount} · {payment.axes.map(axisLabel).join(', ')}"</strong>
+                <span>"{monthsText(payment.months)} · {paymentMethodLabel(payment.method)}"</span>
                 <code>payment.reference</code>
               </div>
-              <div class="when">"Sent " + formatDay(payment.createdAt)</div>
+              <div class="when">"Sent {formatDay(payment.createdAt)}"</div>
               if (payment.status === 'pending') {
                 <div class="decide">
-                  <button class="reject" type="button" disabled={busyId === payment.id} onClick={() => decide(payment.id, 'rejected')}>"Reject"</button>
-                  <button class="desk-button" type="button" disabled={busyId === payment.id} onClick={() => decide(payment.id, 'approved')}>"Approve"</button>
+                  <button class="reject" type="button" disabled=(busyId === payment.id) onClick=(() => decide(payment, 'rejected'))>"Reject"</button>
+                  <button class="desk-button" type="button" disabled=(busyId === payment.id) onClick=(() => decide(payment, 'approved'))>"Approve"</button>
                 </div>
               } else {
                 <p class="decided" data-status={payment.status}>
                   paymentStatusLabels[payment.status]
-                  <span>"by " + (payment.decidedBy ?? 'staff') + " · " + formatDay(payment.decidedAt ?? payment.createdAt)</span>
+                  <span>"by {payment.decidedBy ?? 'staff'} · {formatDay(payment.decidedAt ?? payment.createdAt)}"</span>
                 </p>
               }
             </li>

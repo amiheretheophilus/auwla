@@ -468,16 +468,16 @@ export function SignalCardPreview({ card, review, signalId, publishedAt }: Previ
       <article class="card" data-axis={card.axis} data-posted={String(posted)} aria-label={posted ? 'Signal card ' + signalId : 'Score card preview'}>
         <header class="top">
           <span class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>"Triaxis"</span>
-          <span class="tag">"Axis " + (axisNumbers[card.axis] ?? '') + " · " + card.market</span>
+          <span class="tag">"Axis {axisNumbers[card.axis] ?? ''} · {card.market}"</span>
         </header>
 
         <div class="asset">
           <div>
             <h3>card.symbol || "Asset"</h3>
-            <p>card.market + " · " + entryType</p>
+            <p>"{card.market} · {entryType}"</p>
           </div>
           if (side) {
-            <span class="side" data-side={side}>card.direction</span>
+            <span class="side" data-side=side>card.direction</span>
           }
         </div>
 

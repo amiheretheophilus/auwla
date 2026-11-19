@@ -223,7 +223,7 @@ export function PlanCard({ plan, selected = false }: PlanCardProps) {
   }
 
   return (
-    <article class="plan" data-featured={String(featured)} data-selected={String(selected)} aria-label={name}>
+    <article class="plan" data-featured={String(featured)} data-selected={String(selected)} aria-label=name>
       <div class="head">
         <h3 class="name">name</h3>
         if (featured) {
@@ -231,7 +231,7 @@ export function PlanCard({ plan, selected = false }: PlanCardProps) {
         }
       </div>
 
-      <p class="price"><strong>"$" + plan.price</strong> <span>priceUnit(plan)</span></p>
+      <p class="price"><strong>"${plan.price}"</strong> <span>priceUnit(plan)</span></p>
       if (monthlyNote(plan)) {
         <p class="per-month">monthlyNote(plan)</p>
       }
@@ -239,7 +239,7 @@ export function PlanCard({ plan, selected = false }: PlanCardProps) {
       <div>
         <ul class="axes" aria-label="Axes included">
           for (const axis of axes) {
-            <li key={axis} class="axis" data-axis={axis}>markets[axis].label</li>
+            <li key=axis class="axis" data-axis=axis>markets[axis].label</li>
           }
         </ul>
       </div>

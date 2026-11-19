@@ -111,8 +111,8 @@ export function PlansSection({ member }: { member: boolean }) {
         <ul class="cards" aria-label="Plans">
           for (const plan of plansOnSale()) {
             <li key={plan.id} class="reveal">
-              <PlanCard plan={plan}>
-                <PlanLink slot="action" plan={plan} member={member} />
+              <PlanCard plan=plan>
+                <PlanLink slot="action" plan=plan member=member />
               </PlanCard>
             </li>
           }

@@ -123,7 +123,7 @@ export function DeskHeader({ staff }: { staff: StaffMember | null }) {
           <a class="nav-link" href="/">"Public site"</a>
         }
         if (staff) {
-          <span class="identity"><StaffBadge member={staff} role={true} /></span>
+          <span class="identity"><StaffBadge member=staff role={true} /></span>
           <form method="post" action="/desk/sign-out">
             <button class="desk-button desk-button--quiet" type="submit">"Sign out"</button>
           </form>

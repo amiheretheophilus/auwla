@@ -330,6 +330,14 @@ function formatUpdated(value: string) {
   return updatedFormat.format(new Date(value)) + ' UTC';
 }
 
+/** "Forex", "Crypto" or "Synthetics", or the stored value for an axis no longer offered. */
+function marketName(axis: string) {
+  if (isAxis(axis)) {
+    return markets[axis].label;
+  }
+  return axis;
+}
+
 function directionLabel(axis: string, direction: string) {
   if (direction === 'buy') return axis === 'crypto' ? 'Long' : 'Buy';
   if (direction === 'sell') return axis === 'crypto' ? 'Short' : 'Sell';
@@ -374,12 +382,10 @@ export function AnalysesBoard({ staff, analyses, authors }: BoardProps) {
     to = '';
   }
 
-  const create = $forms(() => {
-    const request = startAnalysis();
-    $track(create).onSuccess(result => {
-      if (result.ok) navigate('/desk/analyses/:id', { params: { id: String(result.id) } });
-    });
-    return request;
+  const create = $forms(async () => {
+    const started = await startAnalysis();
+    navigate('/desk/analyses/:id', { params: { id: String(started.id) } });
+    return started;
   });
 
   return (
@@ -399,10 +405,8 @@ export function AnalysesBoard({ staff, analyses, authors }: BoardProps) {
               }
             </button>
           </form>
-          if (create.result && !create.result.ok) {
-            <p class="create-error" role="alert">create.result.message</p>
-          } else if (create.errors.length > 0) {
-            <p class="create-error" role="alert">"The analysis could not be started. Check your session and try again."</p>
+          if (create.errors.length > 0) {
+            <p class="create-error" role="alert">create.errors[0]?.message</p>
           }
         </div>
       </div>
@@ -414,7 +418,7 @@ export function AnalysesBoard({ staff, analyses, authors }: BoardProps) {
           </button>
         </li>
         for (const value of statusOrder) {
-          <li key={value}>
+          <li key=value>
             <button class="tab" type="button" aria-pressed={status === value} onClick={() => status = value}>
               statusLabels[value] <small>countOf(value)</small>
             </button>
@@ -438,23 +442,23 @@ export function AnalysesBoard({ staff, analyses, authors }: BoardProps) {
           <select onChange={event => market = event.currentTarget.value}>
             <option value="all" selected={market === 'all'}>"All markets"</option>
             for (const axis of axes) {
-              <option key={axis} value={axis} selected={market === axis}>markets[axis].label</option>
+              <option key=axis value=axis selected={market === axis}>markets[axis].label</option>
             }
           </select>
         </label>
         <label class="desk-label">
           "Asset"
-          <input type="search" placeholder="Search, e.g. XAUUSD" value={search} onInput={event => search = event.currentTarget.value} />
+          <input type="search" placeholder="Search, e.g. XAUUSD" value=search onInput={event => search = event.currentTarget.value} />
         </label>
         <label class="desk-label">
           "Updated from"
-          <input type="date" value={from} max={to || undefined} onInput={event => from = event.currentTarget.value} />
+          <input type="date" value=from max={to || undefined} onInput={event => from = event.currentTarget.value} />
         </label>
         <label class="desk-label">
           "Updated to"
-          <input type="date" value={to} min={from || undefined} onInput={event => to = event.currentTarget.value} />
+          <input type="date" value=to min={from || undefined} onInput={event => to = event.currentTarget.value} />
         </label>
-        <button class="clear" type="button" disabled={!filtering} onClick={clearFilters}>"Clear filters"</button>
+        <button class="clear" type="button" disabled=(!filtering) onClick=clearFilters>"Clear filters"</button>
       </div>
 
       if (analyses.length === 0) {
@@ -466,7 +470,7 @@ export function AnalysesBoard({ staff, analyses, authors }: BoardProps) {
         <div class="empty">
           <h2>"Nothing matches these filters"</h2>
           <p>"Try another analyst, market or date range."</p>
-          <button class="desk-button desk-button--quiet" type="button" onClick={clearFilters}>"Clear filters"</button>
+          <button class="desk-button desk-button--quiet" type="button" onClick=clearFilters>"Clear filters"</button>
         </div>
       } else {
         <div>
@@ -484,7 +488,7 @@ export function AnalysesBoard({ staff, analyses, authors }: BoardProps) {
                   route-to={{ path: '/desk/analyses/:id', params: { id: String(analysis.id) } }}>
                   <span class="asset" data-axis={analysis.axis}>
                     <strong>analysis.symbol || "No asset yet"</strong>
-                    <span>analysisLabel(analysis.id) + " · " + (isAxis(analysis.axis) ? markets[analysis.axis].label : analysis.axis) + " · " + directionLabel(analysis.axis, analysis.direction)</span>
+                    <span>"{analysisLabel(analysis.id)} · {marketName(analysis.axis)} · {directionLabel(analysis.axis, analysis.direction)}"</span>
                   </span>
                   <span class="author"><StaffBadge member={analysis.author} /></span>
                   <span class="status" data-status={analysis.status}>statusLabels[analysis.status]</span>
