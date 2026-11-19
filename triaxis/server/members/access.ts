@@ -1,5 +1,6 @@
 // Who the signed-in member is and which axes they hold. Every member page and every signal
 // read goes through here, so access is decided on the server and never only in the page.
+import type { StaffRole } from '../../src/desk/analysis';
 import { axes } from '../../src/desk/draft/model/signal-fields';
 import { axisLabel } from '../../src/members/plans';
 import type { AxisAccess, Member } from '../../src/members/membership';
@@ -27,9 +28,16 @@ export async function getMember(request: Request): Promise<SignedInMember | null
 
   const role = typeof user.role === 'string' ? user.role : 'user';
   return {
-    member: { id: user.id, name: user.name || user.email, email: user.email, staff: isStaffRole(role) },
+    member: { id: user.id, name: user.name || user.email, email: user.email, staffRole: staffRoleOf(role) },
     role,
   };
+}
+
+function staffRoleOf(role: string): StaffRole | null {
+  if (isStaffRole(role)) {
+    return role;
+  }
+  return null;
 }
 
 /** Each axis, held or not, with when access ends. Admins hold every axis for life. */

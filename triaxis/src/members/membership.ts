@@ -1,13 +1,14 @@
 // What a member holds, as the member pages and the desk's payments page show it.
 // `server/members/` builds these; access is always decided on the server.
+import type { StaffRole } from '../desk/analysis';
 import type { PublishedSignal } from '../signals/signal-card';
 
 export interface Member {
   id: string;
   name: string;
   email: string;
-  /** Staff are members too; admins hold every axis for life. */
-  staff: boolean;
+  /** The staff role of someone on staff, or null for a member. Admins hold every axis for life. */
+  staffRole: StaffRole | null;
 }
 
 /** One axis and whether the member holds it. */

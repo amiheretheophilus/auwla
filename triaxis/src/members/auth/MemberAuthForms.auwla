@@ -36,9 +36,12 @@ function planQuery(plan: string): Record<string, string> {
 export function MemberSignInForm({ plan }: { plan: string }) {
   const form = $forms((fields: FormData) => {
     const request = memberLogin(String(fields.get('email') ?? '').trim(), String(fields.get('password') ?? ''));
-    $track(form).onSuccess(() => {
-      // Someone who picked a plan carries on to pay for it; anyone else goes to their signals.
-      if (plan) {
+    $track(form).onSuccess(result => {
+      // Staff open the desk. A member who picked a plan carries on to pay for it; any other
+      // member goes to their signals.
+      if ('staff' in result && result.staff) {
+        navigate('/desk', { replace: true });
+      } else if (plan) {
         navigate('/subscribe', { replace: true, query: planQuery(plan) });
       } else {
         navigate('/signals', { replace: true });

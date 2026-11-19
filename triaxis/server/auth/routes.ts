@@ -93,7 +93,8 @@ async function signIn(request: Request, audience: Audience = 'staff') {
   }
 
   // Forward the cookies while keeping Better Auth's session token out of the JSON payload.
-  const signedIn = json({ signedIn: true as const }, { headers: privateHeaders });
+  // `staff` tells the member sign-in form to open the desk instead of the member pages.
+  const signedIn = json({ signedIn: true as const, staff: isStaffRole(body?.user?.role) }, { headers: privateHeaders });
   copyCookies(response, signedIn);
   return signedIn;
 }

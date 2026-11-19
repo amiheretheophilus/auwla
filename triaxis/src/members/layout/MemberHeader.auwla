@@ -97,7 +97,12 @@ function currentPage(isCurrent: boolean): 'page' | undefined {
   return undefined;
 }
 
-/** The member area's header: the member and their pages, or sign-in links for a visitor. */
+/**
+ * The member area's header: the member and their pages, or sign-in links for a visitor.
+ * Staff get the desk's own links here too (the same ones `DeskHeader` shows), so an admin
+ * reaches Payments from any page in one click. Admins hold every axis for life, so they get
+ * no Plans link.
+ */
 export function MemberHeader({ member }: { member: Member | null }) {
   const path = route.pathname;
   const onSignals = path === '/signals';
@@ -112,12 +117,21 @@ export function MemberHeader({ member }: { member: Member | null }) {
       }
       <nav aria-label="Member navigation">
         if (member) {
-          <a class="nav-link" route-to="/signals" aria-current={currentPage(onSignals)}>"Signals"</a>
-          <a class="nav-link" route-to="/pricing" aria-current={currentPage(onPlans)}>"Plans"</a>
-          if (member.staff) {
-            <a class="nav-link" href="/desk">"Desk"</a>
+          if (member.staffRole) {
+            <a class="nav-link" href="/desk">"Analyses"</a>
+            if (member.staffRole === 'admin') {
+              <a class="nav-link" href="/desk/payments">"Payments"</a>
+            }
           }
-          <span class="identity"><StaffBadge member={{ id: member.id, name: member.name, role: 'analyst' }} /></span>
+          <a class="nav-link" route-to="/signals" aria-current={currentPage(onSignals)}>"Signals"</a>
+          if (member.staffRole !== 'admin') {
+            <a class="nav-link" route-to="/pricing" aria-current={currentPage(onPlans)}>"Plans"</a>
+          }
+          if (member.staffRole) {
+            <span class="identity"><StaffBadge member={{ id: member.id, name: member.name, role: member.staffRole }} role={true} /></span>
+          } else {
+            <span class="identity"><StaffBadge member={{ id: member.id, name: member.name, role: 'analyst' }} /></span>
+          }
           <form method="post" action="/sign-out">
             <button class="desk-button desk-button--quiet" type="submit">"Sign out"</button>
           </form>

@@ -96,7 +96,10 @@ function currentPage(isCurrent: boolean): 'page' | undefined {
   return undefined;
 }
 
-/** The desk's header. With `staff`, it shows who is signed in and a sign-out button. */
+/**
+ * The desk's header. With `staff`, it shows the desk's pages, the member Signals page (staff
+ * links are the same as in `MemberHeader`), who is signed in and a sign-out button.
+ */
 export function DeskHeader({ staff }: { staff: StaffMember | null }) {
   const path = route.pathname;
   // An open analysis belongs to the analyses section.
@@ -115,8 +118,10 @@ export function DeskHeader({ staff }: { staff: StaffMember | null }) {
           if (staff.role === 'admin') {
             <a class="nav-link" href="/desk/payments" aria-current={currentPage(path === '/desk/payments')}>"Payments"</a>
           }
+          <a class="nav-link" href="/signals">"Signals"</a>
+        } else {
+          <a class="nav-link" href="/">"Public site"</a>
         }
-        <a class="nav-link" href="/">"Public site"</a>
         if (staff) {
           <span class="identity"><StaffBadge member={staff} role={true} /></span>
           <form method="post" action="/desk/sign-out">

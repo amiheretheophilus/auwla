@@ -2,6 +2,7 @@ import { redirectRoute } from '@memoized-dom/router';
 import { accessFor, getMember, signalsFor } from '#server/members/access';
 import { listMemberPayments, paymentInstructions } from '#server/members/payments';
 import { AuthSplit } from '../auth/AuthSplit.auwla';
+import type { Member } from './membership';
 import { findPlan, plansOnSale } from './plans';
 import { PricingPage } from '../pricing/PricingPage.auwla';
 import { MemberSignInForm, MemberSignUpForm } from './auth/MemberAuthForms.auwla';
@@ -28,8 +29,11 @@ function chosenAxis(query: { get(name: string): string | null }): string {
   return '';
 }
 
-/** Where a member goes once signed in: checkout with their plan picked, or their signals. */
-function afterSignIn(plan: string): string {
+/** Where someone goes once signed in: staff to the desk, a member to checkout with their plan picked, or to their signals. */
+function afterSignIn(plan: string, member: Member): string {
+  if (member.staffRole) {
+    return '/desk';
+  }
   if (plan) {
     return `/subscribe?plan=${encodeURIComponent(plan)}`;
   }
@@ -57,11 +61,12 @@ export function PricingRoute() {
   return <PricingPage member={page.member} plans={plansOnSale()} />;
 }
 
-/** `/sign-in`. A member who is already signed in goes straight on. */
+/** `/sign-in`. Someone who is already signed in goes straight on. */
 export function MemberSignIn() {
   const ready = $routed(async ({ request, query }) => {
     const plan = chosenPlan(query);
-    if (await getMember(request)) return redirectRoute(afterSignIn(plan));
+    const signedIn = await getMember(request);
+    if (signedIn) return redirectRoute(afterSignIn(plan, signedIn.member));
     return { plan };
   });
 
@@ -82,7 +87,8 @@ export function MemberSignIn() {
 export function MemberSignUp() {
   const ready = $routed(async ({ request, query }) => {
     const plan = chosenPlan(query);
-    if (await getMember(request)) return redirectRoute(afterSignIn(plan));
+    const signedIn = await getMember(request);
+    if (signedIn) return redirectRoute(afterSignIn(plan, signedIn.member));
     return { plan };
   });
 
@@ -126,6 +132,8 @@ export function MemberSubscribe() {
     const plan = chosenPlan(query);
     const signedIn = await getMember(request);
     if (!signedIn) return redirectRoute(signInFor(plan));
+    // Admins hold every axis already; there is nothing for them to buy.
+    if (signedIn.role === 'admin') return redirectRoute('/signals');
     return {
       member: signedIn.member,
       plan,
