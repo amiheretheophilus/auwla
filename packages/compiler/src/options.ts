@@ -63,6 +63,12 @@ export interface CompileModulesOptions {
    * (`wiki/compiler/project.md`, "Hot replacement"). Default false.
    */
   readonly hot?: boolean;
+  /**
+   * Components register their derived values, and the runtime reports one an edit the compiler
+   * could not see left out of date (`wiki/compiler/stale.md`). For development: it computes each
+   * value again after updates. Default: the same as `hot`.
+   */
+  readonly staleChecks?: boolean;
   /** The hot runtime that code built with `hot` imports. Default `@memoized-dom/runtime/hot`. */
   readonly hotRuntimePath?: string;
   /**

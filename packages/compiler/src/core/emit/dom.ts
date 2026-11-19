@@ -15,6 +15,7 @@ import { emitConstWrites, emitWrites } from '../../features/handlers/dom';
 import { emitCallbackBoundaries, planCallbackBoundaries } from '../../features/handlers/callbacks';
 import { emitSites } from './sites';
 import { emitMemos } from '../../features/derived/dom';
+import { emitStaleChecks } from '../../features/stale';
 import { emitTakeovers } from '../../features/derived/takeover';
 import { emitRecovery } from './recovery';
 import { emitMutations } from '../../features/handlers/mutations';
@@ -192,6 +193,8 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   // A parent setup can contain a component declaration. Compose the nested
   // function first, before finishCopy seals the parent's emitted tree.
   const components = [...plan.components.values()].sort((left, right) => right.fn.start - left.fn.start);
+  // A server renders once per request: nothing there goes out of date.
+  const staleChecks = (options.staleChecks ?? options.hot === true) && options.routedEnvironment !== 'server';
   for (const component of components) {
     // Its rows have their own factory, and nothing else can call it.
     if (plan.rowOnly?.has(component.fn) === true) {
@@ -205,7 +208,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
         blocked: sourceFlow.blockedSteps,
         taken: sourceFlow.takenBindings,
         changed: sourceFlow.changedBindings,
-      });
+      }, staleChecks ? componentKey(module, plan.module.path, component.fn) : undefined);
     const enclosingFunction = [...module.ancestors(component.fn)].find((ancestor) => {
       return ancestor !== component.fn && is.Function(ancestor);
     });
@@ -287,6 +290,8 @@ function emitComponent(
     readonly taken: ReadonlyMap<import('../graph').BindingNode, Expression>;
     readonly changed: ReadonlyMap<Node, ReadonlyMap<import('../graph').BindingNode, Expression>>;
   },
+  /** With stale checks on, where the component is defined (`features/stale`). */
+  staleKey?: string,
 ): Node {
   const document = names.fresh('_document');
   const id = names.of(plan.fn, '_id');
@@ -502,6 +507,8 @@ function emitComponent(
         runtime, entity, roots: b.ArrayExpression({ elements: roots }),
       }));
     }
+    const stale = staleKey === undefined ? null : emitStaleChecks(plan, replay.replacements, runtime, entity, staleKey);
+    if (stale !== null) body.push(stale);
     body.push(b.FunctionDeclaration({
       id: b.Identifier({ name: update }), params: [],
       body: b.BlockStatement({ body: [
