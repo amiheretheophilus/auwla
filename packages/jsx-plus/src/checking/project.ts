@@ -1,5 +1,5 @@
 import { normalizeForChecking } from '../normalize';
-import { JsxPlusError } from '../diagnostics';
+import { codeSuffix, JsxPlusError } from '../diagnostics';
 import { planFlow } from './flow/plan';
 import { renderFlow } from './flow/render';
 import type { CheckingSource } from './protocol';
@@ -13,7 +13,7 @@ export type { CheckingSource, SpanMapping } from './protocol';
 /** The editor shows the position itself; keep the JSX+ code in the text to tell it from TS codes. */
 function authoredDiagnostic(error: JsxPlusError) {
   return {
-    messageText: `${error.reason} [${error.code}]`,
+    messageText: `${error.reason}${codeSuffix(error.code)}`,
     start: error.range[0],
     length: error.range[1] - error.range[0],
     code: /^JPX\d+$/.test(error.code) ? Number(error.code.slice(3)) : 1999,

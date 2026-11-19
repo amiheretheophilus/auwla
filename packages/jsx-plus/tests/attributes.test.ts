@@ -115,3 +115,9 @@ for (const source of [
     expect(() => normalize(source)).toThrow(expect.objectContaining({ code: 'HOST', range: [brace, brace + 1] }));
   });
 }
+
+it('ends a message with a code the author can look up, and no code for one found in the TypeScript around the markup', () => {
+  // `HOST` names nothing in the error reference, so the message stops at the position.
+  expect(() => normalize('<main><input onInput={event => go(event)\n  /></main>')).toThrow(/ \(\.\/App\.auwla:1:22\)$/);
+  expect(() => normalize('<main data-x=a.b></main>')).toThrow(/\(\.\/App\.auwla:1:\d+\) \[JPX1009\]$/);
+});

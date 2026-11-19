@@ -63,6 +63,17 @@ it('retains both authored errors when only an unfinished template opener can be 
   }]);
 });
 
+it('answers initialize before loading the checker', () => {
+  // TypeScript waits 5 seconds for `initialize` (TS18099), and loading the checker compiles the
+  // compiler's sources, which a busy machine can take longer than that to do. The server's own
+  // imports are only the protocol; the checker is imported when the first project opens.
+  const server = readFileSync(resolve(packageRoot, 'src/mapper/server.ts'), 'utf8');
+  const imports = new Bun.Transpiler({ loader: 'ts' }).scanImports(server);
+
+  expect(imports.filter((entry) => entry.kind === 'import-statement').map((entry) => entry.path)).toEqual(['vscode-jsonrpc/node']);
+  expect(imports.filter((entry) => entry.kind === 'dynamic-import').map((entry) => entry.path)).toEqual(['./project']);
+});
+
 it('serves independent mapper projects and rejects closed handles', async () => {
   const peer = rpcProcess(process.execPath, ['run', 'src/mapper/server.ts']);
   try {

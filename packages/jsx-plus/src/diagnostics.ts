@@ -30,9 +30,17 @@ export class JsxPlusError extends CompileError {
     // A compiler error, so the compiler reports it as the author's wherever it compiles `.auwla`
     // (`language.ts`), at the same path, line and column.
     super(reason, filename, ...positionOf(source, range[0]));
-    this.message = `${reason} (${filename}:${this.line}:${this.column}) [${code}]`;
+    this.message = `${reason} (${filename}:${this.line}:${this.column})${codeSuffix(code)}`;
     this.name = 'JsxPlusError';
   }
+}
+
+/**
+ * ` [JPX1009]`: a code the author can look up in the error reference. `HOST`, the code of an error
+ * found in the TypeScript around the markup, names nothing to look up, so it is left out.
+ */
+export function codeSuffix(code: string): string {
+  return code === 'HOST' ? '' : ` [${code}]`;
 }
 
 /** One-based line and UTF-16 column of an offset, counting `\r\n`, `\r` and `\n` as line ends. */
