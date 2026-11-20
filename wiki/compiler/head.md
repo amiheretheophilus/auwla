@@ -20,7 +20,7 @@ function AnalysisPage() {
 
 ## What it does
 
-- **Compiler** (`src/features/head/lower.ts`), at parse time after slots (`core/parse/index.ts`,
+- **Compiler** (`src/features/head/lower.ts`, exported by `src/features/head/index.ts`), at parse time after slots (`core/parse/index.ts`,
   `lowerMarkup`): `<head>…</head>` becomes `{$headValue(<>…</>)}`, `headValue` imported from
   `@memoized-dom/runtime`. Only the tags are rewritten, so the content keeps its place and its
   errors their positions. It is then a value its site shows like any other, so the tags follow

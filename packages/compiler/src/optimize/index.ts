@@ -9,6 +9,7 @@ import { keyedComparisons } from './keyed-comparisons';
 import { methodCalls } from './methods';
 import { primitiveValues } from './primitive-values';
 import { retainedListIndex } from './retained-list-index';
+import { routeRegions } from './route-regions';
 import { rowLists } from './row-lists';
 import { textFusion } from './text-fusion';
 
@@ -23,7 +24,7 @@ export interface Optimization {
 // Row lists need the method lowering's row-reuse proof.
 const passes: readonly Optimization[] = [
   calledFunctions, handlerReads, primitiveValues, retainedListIndex, methodCalls, helperCalls, rowLists, keyedComparisons,
-  closedLists, textFusion,
+  closedLists, routeRegions, textFusion,
 ];
 
 export function optimizeModules(

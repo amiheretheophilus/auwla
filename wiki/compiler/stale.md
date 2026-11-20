@@ -9,7 +9,8 @@ of date.
 
 ## How it works
 
-- **Compiler** (`src/features/stale/`). With `staleChecks` (default: the same as `hot`, and never
+- **Compiler** (`src/features/stale/emit.ts`, exported by `src/features/stale/index.ts`, called
+  from `core/emit/dom.ts`). With `staleChecks` (default: the same as `hot`, and never
   for a server build), each component registers its plain derived values after its setup:
   `_MD.watchStale(_entity, "./App.tsx#App", [{ name, inputs, read, compute }])`. `compute` is the
   initializer, rewritten as its replay is.
