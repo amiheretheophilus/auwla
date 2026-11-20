@@ -7,7 +7,9 @@
  * 1. the DOM suite: memoized-dom against vanilla JS, every state placement
  *    (component rows, inline rows, module/component state) and the mutable/
  *    immutable update styles, in headless Chrome (`bench/dom/`);
- * 2. the pinned Octane suite: memoized-dom against nine frameworks
+ * 2. the navigation suite: an app with component routes, with and without the route-regions pass
+ *    and with no pass, in headless Chrome (`bench/navigation/`);
+ * 3. the pinned Octane suite: memoized-dom against nine frameworks
  *    (`bench/octane/`), set up on first use.
  *
  * Every report is copied into `bench/results/<time>-<commit>/` (`-custom` for a snapshot),
@@ -16,7 +18,7 @@
  *
  *   bun run bench:vm                       everything, timed
  *   bun run bench:vm --quick               correctness gates and one Octane sample (minutes)
- *   bun run bench:vm --only=dom            or --only=octane
+ *   bun run bench:vm --only=dom            or --only=navigation, --only=octane
  *   bun run bench:vm --before-ref=d6e678b  also compare with a baseline commit, side by side
  *   bun run bench:vm --compiler=<entry>    a snapshot compiler's src/index.ts, for reference
  *   bun run bench:vm --no-build            skip `bun run build`
@@ -29,7 +31,7 @@ import { cpus, totalmem } from 'node:os';
 import { resolve } from 'node:path';
 
 const args = process.argv.slice(2);
-const usage = 'bun run bench:vm [--quick] [--only=dom|octane] [--before-ref=COMMIT] [--compiler=<entry>] [--no-build]';
+const usage = 'bun run bench:vm [--quick] [--only=dom|navigation|octane] [--before-ref=COMMIT] [--compiler=<entry>] [--no-build]';
 if (args.includes('--help')) {
   console.log(usage);
   process.exit(0);
@@ -40,7 +42,9 @@ const unknown = args.filter(arg => !['--quick', '--no-build'].includes(arg)
 if (unknown.length > 0) throw new Error(`Unknown options: ${unknown.join(' ')}\n${usage}`);
 const quick = args.includes('--quick');
 const only = option('only');
-if (only !== undefined && only !== 'dom' && only !== 'octane') throw new Error('--only must be dom or octane');
+if (only !== undefined && only !== 'dom' && only !== 'navigation' && only !== 'octane') {
+  throw new Error('--only must be dom, navigation or octane');
+}
 /** A snapshot compiler's entry, or undefined for this checkout's. */
 const compiler = option('compiler');
 if (compiler === 'next' || compiler === 'old') {
@@ -111,7 +115,7 @@ if (!args.includes('--no-build')) {
   await step('build the packages', () => run([bun, 'run', 'build']));
 }
 
-if (only !== 'octane') {
+if (only === undefined || only === 'dom') {
   await step('DOM suite: memoized-dom against vanilla JS', async () => {
     try {
       await run([bun, 'run', 'bench/dom/build.ts']);
@@ -146,7 +150,18 @@ if (only !== 'octane') {
   }
 }
 
-if (only !== 'dom') {
+if (only === undefined || only === 'navigation') {
+  await step('Navigation suite: compiled route regions with and without their pass', async () => {
+    await run([bun, 'run', 'bench/navigation/run.ts', ...(quick ? ['--validate-only'] : [])]);
+    if (quick) return 'all correctness gates passed (no timings with --quick)';
+    const reports = resolve(root, 'bench/navigation/dist');
+    if (!collect(resolve(reports, `results${suffix}.md`), 'navigation.md')) throw new Error('the navigation suite wrote no report');
+    collect(resolve(reports, `results${suffix}.json`), 'navigation.json');
+    return 'timings in navigation.md';
+  });
+}
+
+if (only === undefined || only === 'octane') {
   await step('Octane suite: memoized-dom against nine frameworks', async () => {
     const ready = git('-C', 'bench/octane/upstream', 'rev-parse', 'HEAD') !== ''
       && existsSync(resolve(octane, 'upstream/benchmarks/js-framework/node_modules'));

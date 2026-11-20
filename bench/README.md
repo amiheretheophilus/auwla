@@ -15,7 +15,9 @@ bun run bench:vm
 
 1. the DOM suite: memoized-dom against vanilla JS, with component and inline
    rows, every state placement, and mutable/immutable updates (`dom/`);
-2. the pinned Octane suite: memoized-dom against nine frameworks (`octane/`).
+2. the navigation suite: an app with component routes, compiled with and without
+   the route-regions pass and with no pass at all (`navigation/`);
+3. the pinned Octane suite: memoized-dom against nine frameworks (`octane/`).
    Its dependencies and Chromium are installed on first use.
 
 Every report lands in one folder, `bench/results/<time>-<commit>/`,
@@ -26,7 +28,7 @@ checkout clean, so the next `git pull` works.
 |---|---|
 | `bun run bench:vm` | everything, timed |
 | `bun run bench:vm --quick` | correctness gates only, and one Octane sample: a check that it all runs |
-| `bun run bench:vm --only=dom` | only the DOM suite (or `--only=octane`) |
+| `bun run bench:vm --only=dom` | only the DOM suite (or `--only=navigation`, `--only=octane`) |
 | `bun run bench:vm --before-ref=d6e678b` | also time the baseline commit side by side, with its own compiler (DOM ABBA comparison and Octane before/after columns) |
 | `bun run bench:vm --compiler=<entry>` | the same with a snapshot compiler's `src/index.ts`, for reference |
 | `bun run bench:vm --no-build` | skip `bun run build` |
