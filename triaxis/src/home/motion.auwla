@@ -109,6 +109,19 @@
     }
   }
 
+  /* A page loading: fast at first, then slower, never quite reaching the end on its own. */
+  @keyframes tx-loading {
+    from {
+      transform: scaleX(0);
+    }
+    20% {
+      transform: scaleX(.45);
+    }
+    to {
+      transform: scaleX(.9);
+    }
+  }
+
   @keyframes tx-grow-y {
     from {
       transform: scaleY(0);

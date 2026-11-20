@@ -86,6 +86,30 @@ import { StaffBadge } from '../../desk/StaffBadge.auwla';
     border-left: 1px solid var(--desk-rule);
   }
 
+  /* While the next page loads, a line runs along the header's bottom edge, and the link to that
+     page is marked. The router sets `data-navigating` and `aria-busy`; the delay keeps a fast
+     page from flashing. */
+  .member-header::after {
+    position: absolute;
+    right: 0;
+    bottom: -1px;
+    left: 0;
+    height: 2px;
+    background: var(--desk-accent);
+    content: "";
+    transform: scaleX(0);
+    transform-origin: left;
+    pointer-events: none;
+  }
+
+  html[data-navigating] .member-header::after {
+    animation: tx-loading 6s .15s cubic-bezier(.1, .7, .3, 1) both;
+  }
+
+  .nav-link[aria-busy="true"] {
+    color: var(--desk-ink);
+  }
+
   /* On a phone the links get a row of their own under the wordmark, which scrolls sideways
      when they don't fit, so every page stays one tap away. */
   @media (max-width: 40rem) {
