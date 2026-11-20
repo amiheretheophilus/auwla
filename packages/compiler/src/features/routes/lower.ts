@@ -312,19 +312,27 @@ class ModuleLowering {
 
     // Below a base, the link carries it (`base.ts`).
     const base = routeBase(this.options.base, this.module.path);
+    let href: string;
     if (target.options === null) {
-      this.#edits.push({ start: attribute.start, end: attribute.end, text: `href=${JSON.stringify(mountedPath(base, target.path))}` });
-      return;
+      href = JSON.stringify(mountedPath(base, target.path));
+    } else {
+      const value = (key: string) => {
+        const node = target.options!.get(key);
+        return node === undefined ? 'void 0' : this.module.source.slice(node.start, node.end);
+      };
+      const build = `${this.#import('buildRoutePath')}(${JSON.stringify(target.path)}, ${value('params')}, ${value('query')}, ${value('hash')})`;
+      // The built path starts with `/`; the root with a query comes out as `/app/?…`, which the
+      // router reads as `/`.
+      href = base === null ? build : `${JSON.stringify(base)} + ${build}`;
     }
-    const value = (key: string) => {
-      const node = target.options!.get(key);
-      return node === undefined ? 'void 0' : this.module.source.slice(node.start, node.end);
-    };
-    const build = `${this.#import('buildRoutePath')}(${JSON.stringify(target.path)}, ${value('params')}, ${value('query')}, ${value('hash')})`;
-    // The built path starts with `/`; the root with a query comes out as `/app/?…`, which the
-    // router reads as `/`.
-    const href = base === null ? build : `${JSON.stringify(base)} + ${build}`;
-    this.#edits.push({ start: attribute.start, end: attribute.end, text: `href={${href}}` });
+    // The link to the page being shown is marked `aria-current="page"`, which screen readers
+    // announce and CSS can style, unless the author set it themselves (a section that covers
+    // several pages).
+    const current = attributeNamed(element, 'aria-current') === undefined
+      ? ` aria-current={${this.#import('currentPage')}(${href})}`
+      : '';
+    const written = target.options === null ? `href=${href}` : `href={${href}}`;
+    this.#edits.push({ start: attribute.start, end: attribute.end, text: `${written}${current}` });
   }
 
   /** A link's destination: a static path, and for the object form its `params`, `query` and `hash`. */

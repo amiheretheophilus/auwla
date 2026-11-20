@@ -179,6 +179,12 @@ export const activeRoute: RouteState = Object.freeze({
   get signal() {
     return followed('signal');
   },
+  get pending() {
+    return followed('pending');
+  },
+  get next() {
+    return followed('next');
+  },
 });
 
 export function navigate<Path extends ApplicationRoutePath>(

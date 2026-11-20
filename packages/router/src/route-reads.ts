@@ -64,6 +64,8 @@ function fieldValue(route: RouteState, field: keyof RouteState): unknown {
       return JSON.stringify(route.matches.map((match) => [match.id, match.pathname]));
     case 'matched':
       return route.matched === null ? null : JSON.stringify([route.matched.id, route.matched.pathname]);
+    case 'next':
+      return route.next?.href ?? null;
     default:
       return route[field];
   }
@@ -83,9 +85,7 @@ function readsOf(runtime: CoreRouteRuntime): RouteReads {
   let subscribed = false;
   let unsubscribe = (): void => {};
 
-  // Every publication of the route reaches the listener (`equals` never holds); it works out what
-  // changed itself. The first call is the subscription's own, before any navigation.
-  unsubscribe = runtime.subscribeSelected((route) => route, () => {
+  const changed = (): void => {
     if (!subscribed) return;
     const state = held.deref();
     if (state === undefined) {
@@ -93,7 +93,16 @@ function readsOf(runtime: CoreRouteRuntime): RouteReads {
       return;
     }
     runWithApplicationRuntime(application, () => publishChanges(runtime, state));
-  }, () => false);
+  };
+  // Every publication of the route reaches the listener (`equals` never holds); it works out what
+  // changed itself. The first call is the subscription's own, before any navigation. A navigation
+  // starting or stopping to wait changes only `pending` and `next`, which it reports apart.
+  const unsubscribeRoute = runtime.subscribeSelected((route) => route, changed, () => false);
+  const unsubscribeWaiting = runtime.subscribeWaiting(changed);
+  unsubscribe = () => {
+    unsubscribeRoute();
+    unsubscribeWaiting();
+  };
   subscribed = true;
 
   return reads;

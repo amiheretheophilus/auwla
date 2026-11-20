@@ -31,6 +31,32 @@ route.matched;              // Nearest active route match
 
 // Request cancellation:
 route.signal;               // AbortSignal: aborted on every subsequent navigation
+
+// A navigation waiting for its page (a $routed loader, a lazy route's code):
+route.pending;              // true until that page shows
+route.next;                 // { href, pathname, search, hash, state } of the page loading, or null
+```
+
+### Showing that a page is loading
+
+While a navigation waits for its page, the router marks the document, so CSS can show it with no code:
+
+- `<html>` has `data-navigating`;
+- each link to the page being loaded has `aria-busy="true"`, which screen readers announce. A link whose author set `aria-busy` is left alone.
+
+```css
+.nav-link[aria-busy="true"] { opacity: .6; }
+html[data-navigating] main { opacity: .7; transition: opacity .2s .15s; }
+```
+
+A component's own `<style>` keeps `html[data-navigating]` global and scopes the rest. The transition delay keeps a fast navigation from flashing. The router writes attributes, never classes: `class` belongs to your components. A navigation with nothing to wait for, or one that changes only the query or hash, never sets any of this, and neither does a server.
+
+For anything CSS can't do, read `route.pending` and `route.next` in markup:
+
+```tsx
+if (route.pending) {
+  <div class="progress" />
+}
 ```
 
 ---
@@ -109,6 +135,8 @@ export function App() {
 
 ### Declarative Links (`route-to`)
 `route-to` on an `<a>` tag compiles to a real `href` with client-side pushState navigation. The compiler rejects it on other elements; use an anchor for a destination or a button with `navigate()` for an action.
+
+The link to the page being shown gets `aria-current="page"`, compared by path (a query or hash on either side doesn't matter). It updates on navigation. A link that sets `aria-current` itself keeps its own value, for a section that covers several pages.
 
 ```tsx
 {/* Static route link */}

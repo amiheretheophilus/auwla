@@ -4,6 +4,7 @@ import {
   validateRoutePattern,
 } from './path';
 import { createScrollCoordinator } from './scroll';
+import { createWaiting } from './waiting';
 import { registerRouteControlContext, type RouteControlContext,
   type PreparedRouteNavigation, type RouteNavigationPreparation, type PreparedRouteMatches } from './control-context';
 import { collectRenderReadiness } from '@memoized-dom/runtime';
@@ -99,6 +100,8 @@ export interface RouteRuntime {
     listener: RouteSelectionListener<Value>,
     equals?: RouteSelectionEquality<Value>,
   ): () => void;
+  /** @internal Called when `route.pending` / `route.next` change (`waiting.ts`), for `route-reads.ts`. */
+  subscribeWaiting(listener: () => void): () => void;
   connect(): () => void;
   installResolver(resolver: RouteResolver): () => void;
   replaceResolver(resolver: RouteResolver): () => void;
@@ -350,6 +353,27 @@ export function createRouteRuntime(
   let navigationId = 0;
   let committingNavigation = 0;
   let activePreparation: AbortController | null = null;
+  /** Where the active preparation's navigation is going. */
+  let preparing: RouteNavigationLocation | null = null;
+  const waitingListeners = new Set<() => void>();
+  const loadingPage = createWaiting({
+    document: typeof document === 'undefined' ? undefined : document,
+    destination: () => preparing,
+    connected: () => connectionCount > 0 && !disposed,
+    publish: () => {
+      for (const listener of [...waitingListeners]) listener();
+    },
+  });
+
+  /**
+   * Hold `preparation` as the one a navigation waits on (to `navigation`'s destination), or none.
+   * `route.pending` follows it (`waiting.ts`).
+   */
+  function setPreparation(preparation: AbortController | null, navigation?: RouteNavigation): void {
+    activePreparation = preparation;
+    preparing = preparation === null ? null : navigation?.to ?? preparing;
+    loadingPage.note();
+  }
   let pendingRenderReady: Promise<void> | undefined;
   let pendingBrowserHref: string | null = null;
   let browserRetry: {
@@ -362,7 +386,7 @@ export function createRouteRuntime(
 
   function supersedePreparation(): void {
     const previous = activePreparation;
-    activePreparation = null;
+    setPreparation(null);
     previous?.abort(new DOMException('Route preparation was superseded', 'AbortError'));
     browserRetry?.reject(new DOMException('History retry was superseded', 'AbortError'));
     browserRetry = null;
@@ -400,6 +424,8 @@ export function createRouteRuntime(
       controllerAccessed = true;
       return controller.signal;
     },
+    get pending() { return loadingPage.next !== null; },
+    get next() { return loadingPage.next; },
   });
 
   function locationSnapshot(): RouteLocationSnapshot {
@@ -680,13 +706,13 @@ export function createRouteRuntime(
       if (disposed || navigationId !== navigation.id || preparation?.signal.aborted) {
         throw preparation?.signal.reason ?? new DOMException('Route navigation was superseded', 'AbortError');
       }
-      if (activePreparation === preparation) activePreparation = null;
+      if (activePreparation === preparation) setPreparation(null);
       controls.emit?.(Object.freeze({ phase: 'complete', navigation }));
       return Object.freeze({ status: 'completed', navigation, redirects });
     };
     if (ready === undefined) return complete();
     const waiting = preparation ?? new AbortController();
-    activePreparation = waiting;
+    setPreparation(waiting, navigation);
     if (!preparingAlready) controls.emit?.(Object.freeze({ phase: 'prepare', navigation }));
     const finished = new Promise<void>((resolve, reject) => {
       const aborted = () => reject(waiting.signal.reason ?? new DOMException('Route navigation was superseded', 'AbortError'));
@@ -694,10 +720,10 @@ export function createRouteRuntime(
       waiting.signal.addEventListener('abort', aborted, { once: true });
       void ready.then(resolve, reject).finally(() => waiting.signal.removeEventListener('abort', aborted));
     }).then(() => {
-      if (activePreparation === waiting) activePreparation = null;
+      if (activePreparation === waiting) setPreparation(null);
       return complete();
     }).catch(error => {
-      if (activePreparation === waiting) activePreparation = null;
+      if (activePreparation === waiting) setPreparation(null);
       if (!disposed && !waiting.signal.aborted && navigationId === navigation.id) {
         // Entry already succeeded. The failed owned region's Group arm owns
         // retry; rerunning navigation would duplicate history or replay gates.
@@ -719,7 +745,7 @@ export function createRouteRuntime(
       return prepared;
     }
     const preparation = new AbortController();
-    activePreparation = preparation;
+    setPreparation(preparation, prepared.navigation);
     pendingBrowserHref = destination.href;
     const destinationMatches = resolveDestination(
       prepared.next, 'pop', userState, preparation.signal,
@@ -752,7 +778,7 @@ export function createRouteRuntime(
       return navigateToURL(to, options);
     };
     if (prepared.next.href !== destination.href) {
-      activePreparation = null;
+      setPreparation(null);
       return redirect(prepared.next, prepared.options);
     }
     if (isHashOnlyDestination(destination, userState) || !hasRoutedPreparations(destinationMatches.matches)) {
@@ -1266,7 +1292,7 @@ export function createRouteRuntime(
     failed: (error: unknown) => void,
     redirect = (to: URL, options: Pick<NavigateOptions, 'replace' | 'state'>) => navigateToURL(to, options),
   ): RouteNavigationResult {
-    activePreparation = preparation;
+    setPreparation(preparation, prepared.navigation);
     controls.emit?.(Object.freeze({ phase: 'prepare', navigation: prepared.navigation }));
     const finished: Promise<RouteNavigationSettledResult> = prepareRoutedMatches(runtime, destination.matches, {
       href: prepared.next.href, params: destination.params, signal: preparation.signal,
@@ -1276,7 +1302,7 @@ export function createRouteRuntime(
       }
       let result: RouteNavigationResult;
       if (outcome.kind === 'redirect') {
-        activePreparation = null;
+        setPreparation(null);
         const to = outcome.redirect.to instanceof URL ? outcome.redirect.to
           : applicationURL(resolveRoutePath(prepared.navigation.to.pathname, outcome.redirect.to));
         result = redirect(to, {
@@ -1286,7 +1312,7 @@ export function createRouteRuntime(
       } else result = publish();
       return result.status === 'preparing' ? result.finished : result;
     }).catch(error => {
-      if (activePreparation === preparation) activePreparation = null;
+      if (activePreparation === preparation) setPreparation(null);
       failed(error);
       throw error;
     });
@@ -1368,6 +1394,9 @@ export function createRouteRuntime(
       new DOMException('Route runtime was disposed', 'AbortError'),
     );
     activePreparation = null;
+    preparing = null;
+    loadingPage.dispose();
+    waitingListeners.clear();
     browserRetry?.reject(new DOMException('Route runtime was disposed', 'AbortError'));
     browserRetry = null;
     controller.abort();
@@ -1381,6 +1410,10 @@ export function createRouteRuntime(
   const runtime: CoreRouteRuntime = {
     route,
     subscribeSelected,
+    subscribeWaiting(listener: () => void) {
+      waitingListeners.add(listener);
+      return () => waitingListeners.delete(listener);
+    },
     connect,
     replaceResolver,
     replaceBasePath,

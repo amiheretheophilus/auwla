@@ -256,6 +256,14 @@ function lowerLink(element: JsxElement, link: JsxAttribute): void {
   attributes.splice(attributes.indexOf(link), 1, b.JSXAttribute({
     name: b.JSXIdentifier({ name: 'href' }), value: value as JsxAttribute['value'],
   }) as (typeof attributes)[number]);
+
+  // The link to the page shown is `aria-current="page"`, unless the author set it.
+  if (attribute(element, 'aria-current') !== undefined) return;
+  const href = generate(is.JSXExpressionContainer(value) ? value.expression : value).code;
+  attributes.push(b.JSXAttribute({
+    name: b.JSXIdentifier({ name: 'aria-current' }),
+    value: b.JSXExpressionContainer({ expression: expression(`$routeCurrent(${href})`) }),
+  }) as (typeof attributes)[number]);
 }
 
 /** Replace `node` with `make(node)`, in braces where it is a JSX child. */

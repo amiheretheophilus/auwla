@@ -28,6 +28,13 @@ route region gets the same tracking, adoption and delivery as any conditional:
   `Story` afresh, while a layout above it stays mounted. A query or hash change keeps it.
 - `route-to` becomes `href`; with params, a query or a hash it is built by the router's
   `buildRoutePath`. The router's click handler makes a click on it navigate in place.
+- It also gets `aria-current={currentPage(href)}` (`router/src/internal.ts`), `'page'` while the
+  link's path is the page shown. A call the compiler cannot see into, so it follows `route.href`
+  as any route read does. A link that sets `aria-current` itself keeps it. The reference
+  (`tests/reference/routes.ts`) adds the same, with its own `$routeCurrent`. Routed pages were
+  never static (their regions read the route), so a link costs no delivery. The `aria-busy` the
+  router puts on links while it waits (`router/src/waiting.ts`) is the router's, not compiled
+  output, so the case harness leaves it out (`tests/harness/serialize.ts`).
 - Native POST forms stay browser-owned in the Navigation API path. A navigation with
   `NavigateEvent.formData` bypasses route interception, so the server receives
   the submitted body and can return cookies or redirects.

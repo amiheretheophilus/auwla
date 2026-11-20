@@ -56,6 +56,16 @@ export { routeRegionIdentity } from './region-identity';
 export function routeRegion(id: string): string | null {
   return readRouteRegion(getActiveRouteRuntime(), id);
 }
+
+/**
+ * `'page'` while a `route-to` link's `href` is the page being shown, for its `aria-current`
+ * (`compiler/src/features/routes/lower.ts`). A query or hash on either side changes nothing: the
+ * page is the same. Read through `route.href`, so the link follows navigation.
+ */
+export function currentPage(href: string): 'page' | undefined {
+  const here = new URL(activeRoute.href);
+  return new URL(href, here).pathname === here.pathname ? 'page' : undefined;
+}
 export const navigateRoute = activeNavigate;
 
 export { createRouteRuntime } from './runtime-full';

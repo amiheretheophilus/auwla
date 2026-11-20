@@ -1054,6 +1054,13 @@ export function $routeHref(path: string, params?: never, query?: never, hash?: s
   return buildRoutePath(path, params, query, hash);
 }
 
+/** A `route-to` link's `aria-current`: `'page'` while its path is the page shown, ignoring query and hash. */
+export function $routeCurrent(href: string): 'page' | undefined {
+  computation?.reads.add(routeDependency);
+  const here = new URL(window.location.href);
+  return new URL(href, here).pathname === here.pathname ? 'page' : undefined;
+}
+
 /** Helpers register with the instance that invokes them, independently of their module. */
 export function $ownedEffect(site: string, inputs: () => unknown[], callback: () => unknown): void {
   if (rendering !== null) rendering.effect(site, inputs, callback);

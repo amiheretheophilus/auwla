@@ -5,7 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { createComputation } from '@memoized-dom/runtime';
 import { createRouteRuntime, route, setActiveRouteRuntime, type RouteRuntime } from '../src/index';
-import { installRouteTable, routeRegion } from '../src/internal';
+import { installRouteTable, registerRoutedPreparation, routeRegion } from '../src/internal';
 
 let runtime: RouteRuntime;
 
@@ -70,5 +70,38 @@ describe('route reads', () => {
   it('set nothing up for a read outside a computation', () => {
     expect(route.pathname).toBe('/story/1');
     expect(routeRegion('about')).toBeNull();
+  });
+
+  it('wake readers of pending and next as a navigation starts and stops waiting', async () => {
+    let release!: (value: string) => void;
+    registerRoutedPreparation({
+      id: 'reads-waiting', server: false,
+      prepare: () => new Promise<string>((resolve) => { release = resolve; }),
+    });
+    const waiting = createRouteRuntime({ environment: {}, routes: [
+      { id: 'home', pattern: '/' },
+      { id: 'slow', pattern: '/slow', metadata: { preparations: ['reads-waiting'] } },
+    ] });
+    setActiveRouteRuntime(waiting);
+    const settled = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+    try {
+      const pending = follow(() => route.pending);
+      const next = follow(() => route.next);
+      const pathname = follow(() => route.pathname);
+
+      const result = waiting.navigate('/slow');
+      if (result.status !== 'preparing') throw new Error('Expected preparation');
+      await settled();
+      // Waiting changes only what is waiting: the page shown is the same.
+      expect([pending.count, next.count, pathname.count]).toEqual([1, 1, 0]);
+
+      release('slow');
+      await result.finished;
+      await settled();
+      expect([pending.count, next.count, pathname.count]).toEqual([2, 2, 1]);
+    } finally {
+      waiting.dispose();
+      setActiveRouteRuntime(runtime);
+    }
   });
 });

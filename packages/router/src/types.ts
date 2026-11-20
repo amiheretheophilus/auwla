@@ -101,6 +101,10 @@ export interface RouteState {
   readonly matches: readonly RouteMatch[];
   readonly matched: RouteMatch | null;
   readonly signal: AbortSignal;
+  /** A navigation is waiting for its page: a `$routed` loader, or a lazy route's code (`waiting.ts`). */
+  readonly pending: boolean;
+  /** The page that navigation is loading, or null. */
+  readonly next: RouteNavigationLocation | null;
 }
 
 /**

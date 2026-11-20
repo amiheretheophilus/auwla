@@ -4,10 +4,17 @@
  * - comments are dropped (renderers may use them as markers);
  * - adjacent text nodes are merged, and empty text is dropped;
  * - attributes are sorted;
- * - form controls show their live `.value` / `.checked`, not the attribute.
+ * - form controls show their live `.value` / `.checked`, not the attribute;
+ * - a link's `aria-busy` is left out: the router marks the links to a page it is waiting for
+ *   (`router/src/waiting.ts`), which compiled code does not write, and the reference renders with
+ *   no waiting at all.
  */
 
 const FORM_PROPERTIES = new Set(['value', 'checked', 'selected']);
+
+function routerOwned(element: Element, name: string): boolean {
+  return name === 'aria-busy' && element.tagName === 'A';
+}
 
 export function serialize(container: Node): string {
   return serializeChildren(container);
@@ -35,7 +42,7 @@ function serializeChildren(parent: Node): string {
 function serializeElement(element: Element): string {
   const tag = element.tagName.toLowerCase();
   const attributes = [...element.attributes]
-    .filter((attribute) => !FORM_PROPERTIES.has(attribute.name))
+    .filter((attribute) => !FORM_PROPERTIES.has(attribute.name) && !routerOwned(element, attribute.name))
     .map((attribute) => ` ${attribute.name}="${escapeAttribute(attribute.value)}"`)
     .sort();
 
