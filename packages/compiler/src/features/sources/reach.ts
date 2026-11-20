@@ -25,6 +25,7 @@ import type { SemanticGraph } from '../../core/graph';
 import { variableDeclaration } from '../../core/graph/inputs';
 import { intrinsicTag, unwrap } from '../../core/plan/jsx';
 import { hasComputedImport, importedDefinition, namespaceModule } from '../../core/resolve';
+import { isStylesheet } from '../../core/resolve/imports';
 import { frameworkPackage, importOf, isFrameworkMount } from '../../core/resolve/exports';
 import { functionValue, type FunctionNode } from '../../core/resolve/functions';
 import { lifecycleKind } from '../../core/resolve/ambient';
@@ -120,12 +121,16 @@ export class SourceReach {
       // Code outside the graph may create its own sources, and a dynamically
       // imported namespace is read without this proof's member resolution.
       // A route's lazy page (`routes/split.ts`) is the exception: its namespace goes straight to the
-      // router, never to authored code, so it brings in nothing unknown.
+      // router, never to authored code, so it brings in nothing unknown. So is a stylesheet
+      // (`import './App.auwla.css'`, which every `.auwla` file with a <style> has): it runs no code,
+      // and a CSS module's exports are class names. Before 2026-11-20 one stylesheet anywhere put
+      // readiness code into every component of the app.
       const readsUnknown = hasComputedImport(module)
         || module.findAll('ImportExpression').some((load) => !isRouteModuleLoad(module, load))
         || module.imports.some((imported) => {
           return !imported.typeOnly && imported.kind !== 'dynamic'
-            && imported.resolvedModule === null && !isFramework(imported.specifier);
+            && imported.resolvedModule === null && !isFramework(imported.specifier)
+            && !isStylesheet(imported.specifier);
         });
 
       if (readsUnknown) {
@@ -208,7 +213,10 @@ export class SourceReach {
 
     // A cycle of components is judged by the rest of what it shows.
     this.#free.set(module, true);
-    const free = !this.#everything && !this.#unknown && this.#moduleIsFree(module);
+    // Once values from unknown code may hold a source, a module stays free only if it evaluates
+    // none: an app builds `{ label, detail }` from its data somewhere, and before 2026-11-20 that
+    // alone put readiness into its static components.
+    const free = !this.#everything && (!this.#unknown || evaluatesNothingUnknown(module)) && this.#moduleIsFree(module);
     this.#free.set(module, free);
     return free;
   }
@@ -973,6 +981,14 @@ export class SourceReach {
       return;
     }
 
+    // So does a form with its action: on submit, as a handler would (`data/src/forms.ts`). What the
+    // action returns reaches the page through the form, which already counts as a source. Before
+    // 2026-11-20 an action awaiting a server function made every call to unknown code a possible
+    // wait, and readiness spread to every component.
+    if (formAction(module, position, parent)) {
+      return;
+    }
+
     // `mount('root', App)` starts a root of its own, with nothing from this caller.
     if (is.CallExpression(parent) && parent.callee !== position && isFrameworkMount(module, parent)) {
       return;
@@ -980,6 +996,13 @@ export class SourceReach {
 
     if (is.JSXOpeningElement(parent) && parent.name === position) {
       invocations.elements.push({ module, element: module.parentOf(parent) as JsxElement });
+      return;
+    }
+
+    // `</Panel>` names the component its opening tag already invokes. Before 2026-11-20 it fell
+    // through to unknown code, so a component given children that read a source made every call
+    // to unknown code in the app a possible wait, and readiness spread to every component.
+    if (is.JSXClosingElement(parent) && parent.name === position) {
       return;
     }
 
@@ -1128,6 +1151,60 @@ function propertyKey(pattern: Extract<Node, { type: 'ObjectPattern' }>, declarat
   }
 
   return null;
+}
+
+/**
+ * Whether nothing in `module`, in its functions too, can evaluate a value from unknown code: no
+ * call, member read, global, `this`, `await`, `yield` or `import()`. Markup with literal text and
+ * attributes, and components it names, is all such a module shows. Its own bindings and the
+ * components it shows are judged by the proof's other facts.
+ */
+function evaluatesNothingUnknown(module: Module): boolean {
+  let nothing = true;
+
+  walk(module.ast, { enter: (node, context) => {
+    if (is.CallExpression(node) || is.NewExpression(node) || is.MemberExpression(node)
+      || is.TaggedTemplateExpression(node) || is.ThisExpression(node) || is.AwaitExpression(node)
+      || is.YieldExpression(node) || is.ImportExpression(node)) {
+      nothing = false;
+      context.stop();
+      return;
+    }
+
+    if (is.Identifier(node)) {
+      const reference = module.referenceOf(node);
+      // A declaration's own name is no reference; an unresolved reference reads a global.
+      const global = reference != null && reference.binding == null && !reference.inTypePosition
+        && node.name !== 'undefined' && node.name !== 'NaN' && node.name !== 'Infinity';
+
+      if (global) {
+        nothing = false;
+        context.stop();
+      }
+    }
+  } });
+
+  return nothing;
+}
+
+/**
+ * A function in the action position of `$forms`: its first argument, `$forms(save)`, or the
+ * `action` of its options, `$forms({ schema, action: save })`.
+ */
+function formAction(module: Module, position: Node, parent: Node | null): boolean {
+  if (is.CallExpression(parent) && parent.arguments[0] === position) {
+    return dataExport(module, parent.callee) === '$forms';
+  }
+
+  if (!is.Property(parent) || parent.value !== position || parent.computed
+    || !is.Identifier(parent.key) || parent.key.name !== 'action') {
+    return false;
+  }
+
+  const options = module.parentOf(parent);
+  const call = options === null ? null : module.parentOf(options);
+  return is.ObjectExpression(options) && is.CallExpression(call) && call.arguments[0] === options
+    && dataExport(module, call.callee) === '$forms';
 }
 
 /** Framework packages: their exports are known and create sources only through `@memoized-dom/data`. */

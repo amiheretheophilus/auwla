@@ -228,6 +228,101 @@ describe('readiness reach', () => {
     expect(output).toMatch(/readSourceValue\(item\)/);
   });
 
+  it('brings in nothing unknown through a stylesheet, unlike a library', () => {
+    // Every `.auwla` file with a <style> imports its stylesheet. Before, that import made values
+    // from unknown code possible sources across the whole app, so a component that shows only
+    // markup got readiness code and the data package's internals.
+    const files = (extra: string) => ({
+      './main.ts': `import { mount } from '@memoized-dom/runtime';\nimport { App } from './App';\nmount('root', App);\n`,
+      // The call is what a library's values could reach; a module of plain markup reads none.
+      './Footer.tsx': `${extra}\nexport function Footer() { return <footer>{'Triaxis'.toUpperCase()}</footer>; }`,
+      './App.tsx': `import { $fetch } from '@memoized-dom/data';
+        import { Footer } from './Footer';
+        export function App() {
+          const items = $fetch('/items');
+          return <main><p>{items.length}</p><Footer /></main>;
+        }`,
+    });
+    const options = { entries: ['./main.ts'] };
+
+    const styled = compileModules(files(`import './Footer.css';`), options)['./Footer.tsx']!;
+    expect(styled).toContain(`import './Footer.css'`);
+    expect(styled).not.toContain('@memoized-dom/data');
+
+    const library = compileModules(files(`import 'some-library';`), options)['./Footer.tsx']!;
+    expect(library).toContain('@memoized-dom/data/internal');
+  });
+
+  it("reads a component's closing tag as no call of its own", () => {
+    // `</Panel>` names Panel again. Before, that reference counted as unknown code running Panel,
+    // whose props read a source, so every call to unknown code (here `toUpperCase`) could wait.
+    const files = (panel: string) => ({
+      './main.ts': `import { mount } from '@memoized-dom/runtime';\nimport { App } from './App';\nmount('root', App);\n`,
+      './Panel.tsx': 'export function Panel({ busy, children }) { return <section>{busy ? "Saving" : children}</section>; }',
+      './App.tsx': `import { Panel } from './Panel';
+        export function App() {
+          const items = $fetch('/items');
+          const shout = 'hi'.toUpperCase();
+          return <main><h1>{shout}</h1>${panel}</main>;
+        }`,
+    });
+    const options = { entries: ['./main.ts'] };
+
+    const closed = compileModules(files('<Panel busy={items.length}><p>child</p></Panel>'), options)['./App.tsx']!;
+    const selfClosed = compileModules(files('<Panel busy={items.length} children={<p>child</p>} />'), options)['./App.tsx']!;
+    expect(selfClosed).toContain(`let shout = 'hi'.toUpperCase();`);
+    expect(closed).toContain(`let shout = 'hi'.toUpperCase();`);
+  });
+
+  it('runs a form action on submit, never from unknown code inside a render', () => {
+    // `$forms` calls its action from a submit. Before, an action awaiting a function that returns
+    // a source counted as unknown code running a function that waits, so every call to unknown
+    // code (here `toUpperCase`) could wait.
+    const files = (form: string) => ({
+      './main.ts': `import { mount } from '@memoized-dom/runtime';\nimport { App } from './App';\nmount('root', App);\n`,
+      './App.tsx': `
+        function save(name) { return $fetch('/save', { method: 'POST', body: { name } }); }
+        export function App() {
+          const items = $fetch('/items');
+          const shout = 'hi'.toUpperCase();
+          const form = ${form};
+          return <main><h1>{shout}</h1><p>{items.length}</p><form onSubmit={form.submit} /></main>;
+        }`,
+    });
+    const options = { entries: ['./main.ts'] };
+    const action = `async (fields) => { const saved = await save(fields.get('name')); return saved; }`;
+
+    for (const form of [`$forms(${action})`, `$forms({ action: ${action} })`]) {
+      expect(compileModules(files(form), options)['./App.tsx']!).toContain(`let shout = 'hi'.toUpperCase();`);
+    }
+    // Handed to code outside the graph, the same action still counts.
+    const handed = compileModules(files(`record(${action})`), options)['./App.tsx']!;
+    expect(handed).not.toContain(`let shout = 'hi'.toUpperCase();`);
+  });
+
+  it('keeps a module of plain markup free of readiness once unknown values may hold a source', () => {
+    // A source inside an object literal counts as reaching unknown code. Before, that made every
+    // module in the app need readiness, even a footer that evaluates nothing.
+    const files = (footer: string) => ({
+      './main.ts': `import { mount } from '@memoized-dom/runtime';\nimport { App } from './App';\nmount('root', App);\n`,
+      './Footer.tsx': `export function Footer() { return <footer>${footer}</footer>; }`,
+      './App.tsx': `import { Footer } from './Footer';
+        export function App() {
+          const items = $fetch('/items');
+          const rows = [{ count: items }];
+          return <main><p>{rows.length}</p><Footer /></main>;
+        }`,
+    });
+    const options = { entries: ['./main.ts'] };
+
+    const plain = compileModules(files('<p class="mark">"Triaxis"</p>'), options)['./Footer.tsx']!;
+    expect(plain).not.toContain('@memoized-dom/data');
+
+    // A global could hold anything code outside the graph put there.
+    const global = compileModules(files('<p>{location.host}</p>'), options)['./Footer.tsx']!;
+    expect(global).toContain('@memoized-dom/data/internal');
+  });
+
   it("brings in nothing unknown through a route's lazy page, unlike an authored import()", () => {
     // In a browser build a page imported only for its route loads with `import()`, whose namespace
     // goes straight to the router. Before, any `import()` made every value from unknown code a

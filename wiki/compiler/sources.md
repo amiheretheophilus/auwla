@@ -451,7 +451,13 @@ other modules use it (`freeOfSources`). It does not import the data package, not
 can hold a source or wait, and every component it shows is the same. A `Group` policy
 passes down through the components between it and a source, so a module showing one that
 needs readiness, or one the proof cannot name, keeps it. A source created by a callback run
-in such a module belongs to the nearest frame above that owns sources.
+in such a module belongs to the nearest frame above that owns sources. Once the unknown-code
+flag is set, a module is still free when it evaluates nothing unknown code could have made: no
+call, member read, global, `this`, `await`, `yield` or `import()`, in its functions too
+(`evaluatesNothingUnknown`). Markup with literal text, and components, is all it shows. Before
+2026-11-20 the flag alone ruled it out, and any real app sets the flag by putting a source in
+an object or array literal somewhere, so Triaxis's static footer, hero and approach sections
+carried readiness and the data package's internals.
 
 The proof is one fixpoint over the whole graph with facts that only grow:
 bindings that may hold one, functions that may return one, functions whose run
@@ -484,7 +490,9 @@ its namespace is read only for named exports handed straight to a framework call
 (`isRouteModuleLoad`). Before, every browser build with a lazy route set the flag, and
 readiness wrapped host calls such as a form handler's `event.preventDefault()` in the
 directory example; `reach.test.ts` checks the loader leaves it unset and an authored
-`import()` still sets it. An identifier read in an ordinary position is unwrapped to its payload, so
+`import()` still sets it. Nor does a stylesheet (`import './App.auwla.css'`, in every `.auwla`
+file with a `<style>`): it runs no code, and a CSS module's exports are class names. Until
+2026-11-20 it did, so every app with a stylesheet had the flag set. An identifier read in an ordinary position is unwrapped to its payload, so
 passing it hands unknown code the payload. Raw values escape through: a
 non-identifier argument of an unknown call, an array or object element, a member
 assignment, `throw`, `yield`, a tagged template, an unknown component's
@@ -499,7 +507,12 @@ readiness computations, also when passed through a component's prop. They do
 not set this flag. (Assumption: authored code does not dispatch a DOM event
 synchronously inside a render expression.) Nor does `mount('root', App)`, which starts a
 root of its own with nothing from its caller. Every app calls it, so if it set the flag,
-every app whose root waits would guard all its host calls.
+every app whose root waits would guard all its host calls. Nor does a `$forms` action
+(`$forms(action)`, `$forms({ action })`), which runs on submit as a handler does; what it returns
+reaches the page through the form, already a source. Nor does a component's closing tag
+(`</Panel>`), which names the component its opening tag invokes. Until 2026-11-20 both set the
+flag, found in Triaxis: a form action awaiting a server function, and `<AuthForm>…</AuthForm>`
+with a prop read from a form, each made every host call in the app a possible wait.
 
 A read wrapped in `readSourceValue(…)` ends its chain there. In `forms.result?.photos.map(…)`,
 wrapping `forms.result?.photos` meant `.map` ran on undefined when there was no `result`. A chain
