@@ -425,3 +425,15 @@ it('delivers one scoped CSS companion per source module through the existing pro
   expect(result.css!['./Cards.auwla.css']).not.toContain('@use');
   expect(result.output['./Cards.auwla']).not.toContain('padding:');
 });
+
+it('marks no head tag: in a <head> block they go to the document head, where no style applies', () => {
+  const result = normalize(`export function Page() {
+  <style>
+    .page { color: red; }
+  </style>
+  return <main class="page"><head><title>"Pricing"</title><meta name="description" content="Plans" /></head></main>;
+}`);
+  expect(result.code).toMatch(/<main class="page" data-mmd-s-[\w-]+="">/);
+  expect(result.code).toContain('<title>');
+  expect(result.code).toContain('<meta name="description" content="Plans" />');
+});

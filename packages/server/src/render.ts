@@ -18,7 +18,7 @@ export async function render(component:ServerComponent,options:RenderOptions={})
   return RenderSession.execute(component,options,stringTier(),async session=>{
     await session.prepare();const root=session.mount();await session.settle();
     const html=serializeString(session,root), payload=session.payload();
-    return {html,payload,scriptTag:session.carriesPayload?createPayloadScriptTag(session.rootId,payload):'',settlement:session.settlement,routeComponents:session.routeComponents()};
+    return {html,payload,scriptTag:session.carriesPayload?createPayloadScriptTag(session.rootId,payload):'',settlement:session.settlement,routeComponents:session.routeComponents(),head:session.pageHead()};
   });
 }
 /** Synchronous shell only; routed preparation and request settlement need render(). */

@@ -23,6 +23,7 @@ import type {
   SerializedRoutedPreparationState,
 } from '@memoized-dom/router/internal';
 import type { SerializedDataState } from '@memoized-dom/data';
+import type { ServerHeadTag } from '@memoized-dom/runtime/server';
 import type { RenderSettlement } from './session';
 
 export { serverRootId, type ServerComponent } from './root-id';
@@ -45,6 +46,8 @@ export interface RenderResult {
   settlement: RenderSettlement;
   /** Route components the page shows that a browser loads with their route (`RenderSession.routeComponents`). */
   routeComponents: readonly string[];
+  /** The tags the page's `<head>` blocks put in the document head (`RenderSession.pageHead`). */
+  head: readonly ServerHeadTag[];
 }
 
 export interface RenderOptions {

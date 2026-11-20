@@ -14,6 +14,8 @@ export interface MarkupFunction {
 
 export interface NativeMarkup {
   readonly range: AnalysisRange;
+  /** The element's tag, `div`. */
+  readonly tag: string;
   /** Insert attributes here, before the opening tag's closing `>` or `/>`. */
   readonly attributesAt: number;
   /** Function indices, innermost first. A callback is not necessarily a component. */
@@ -50,7 +52,8 @@ export function inspectMarkup(source: string): MarkupOwnership {
   const elements: NativeMarkup[] = [];
 
   for (const element of module.findAll('JSXElement')) {
-    if (intrinsicTag(element) === null) {
+    const tag = intrinsicTag(element);
+    if (tag === null) {
       continue;
     }
 
@@ -64,6 +67,7 @@ export function inspectMarkup(source: string): MarkupOwnership {
     const opening = element.openingElement;
     elements.push({
       range: range(element),
+      tag,
       attributesAt: original(opening.end - (opening.selfClosing ? 2 : 1)),
       functions: owners,
     });

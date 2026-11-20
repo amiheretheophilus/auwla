@@ -25,7 +25,9 @@ import {
   numberedDocument,
   prepareRequestModuleStates,
   serverCreations,
+  serverPageHead,
   valueComponent,
+  type ServerHeadTag,
 } from '@memoized-dom/runtime/server';
 import {
   createMemoryRouteHistory,
@@ -207,6 +209,15 @@ export class RenderSession {
       if (typeof key === 'string' && !keys.includes(key)) keys.push(key);
     }
     return keys;
+  }
+
+  /**
+   * The tags this render's `<head>` blocks show (`runtime/src/head.ts`), for the page's head
+   * (`page-head.ts`). Read after the first render: what a block reads later, such as data that
+   * settles while the page streams, reaches the browser's head once it arrives.
+   */
+  pageHead(): readonly ServerHeadTag[] {
+    return runWithApplicationRuntime(this.applicationRuntime, serverPageHead);
   }
 
   mount(): Node {

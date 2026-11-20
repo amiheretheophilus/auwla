@@ -78,6 +78,7 @@ export {
   mutatedSince, mutationTime,
 } from './mutation';
 export { watchStale, type StaleCheck } from './stale';
+export { headValue, serverPageHead, type ServerHeadTag } from './head';
 export { createRowCache, fromRows, mapRows } from './list-map';
 export { createRowList, uneditedItems, whenQuiet } from './row-list';
 export { createComputation, noteOwnOutput, observeNamespace, readNamespace, trackEquals, trackRead, tracking, untracked } from './computation';

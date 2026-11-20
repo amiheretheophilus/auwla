@@ -36,6 +36,7 @@ import type { RenderSettlement } from './session';
 import { prepareRenderToReadableStream } from './stream';
 import type { ServerIntegration } from './integration';
 import { withRouteStyles } from './route-styles';
+import { withPageHead } from './page-head';
 
 /**
  * How one SSR root renders and is delivered. Application defaults merge
@@ -372,7 +373,7 @@ async function renderPage<
       const headers = new Headers(options.init?.headers);
       headers.append('server-timing', serverTiming(result.settlement, performance.now() - started));
       return htmlResponse(
-        withRouteStyles(template.prefix, result.routeComponents, options.routeStyles) +
+        withPageHead(withRouteStyles(template.prefix, result.routeComponents, options.routeStyles), result.head) +
           (markers ? result.html + result.scriptTag : result.html) +
           template.suffix,
         { ...options.init, headers },
@@ -384,12 +385,15 @@ async function renderPage<
     // gate failures still produce their own status through the error path.
     // The matched routes are known by now, before any HTML is sent: their styles go in the head.
     const routeComponents = await application.prepared;
+    // The first render runs at once after preparation. One that fails sends the page with no
+    // head tags of its own, and the stream reports the failure, as before head tags existed.
+    const head = await application.head.catch(() => []);
     application.ready.then(settled, (error: unknown) => {
       report(failureOutcome(error, context.request), { error });
     });
     return htmlResponse(
       composeDocumentStream({
-        prefix: withRouteStyles(template.prefix, routeComponents, options.routeStyles),
+        prefix: withPageHead(withRouteStyles(template.prefix, routeComponents, options.routeStyles), head),
         body: application.stream,
         suffix: template.suffix,
         // Post-commit failure: leave the outlet empty so the client mounts

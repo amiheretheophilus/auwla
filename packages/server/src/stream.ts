@@ -3,6 +3,7 @@ import { createPayloadScriptTag } from './render';
 import type { RenderOptions } from './index';
 import type { ServerComponent } from './root-id';
 import { isPageContent, type PageContent } from '@memoized-dom/runtime';
+import type { ServerHeadTag } from '@memoized-dom/runtime/server';
 import { RenderSession, type RenderSettlement } from './session';
 import {
   RegionTracker,
@@ -21,6 +22,11 @@ export interface PreparedRenderStream {
    * with their route (`RenderSession.routeComponents`), before any HTML is sent.
    */
   readonly prepared: Promise<readonly string[]>;
+  /**
+   * The tags the page's `<head>` blocks show (`RenderSession.pageHead`), once the first render has
+   * run, which is at once after `prepared`: the page's head is written before any HTML is sent.
+   */
+  readonly head: Promise<readonly ServerHeadTag[]>;
   /** Settles after the complete server render succeeds or rejects. */
   readonly ready: Promise<RenderSettlement>;
 }
@@ -93,6 +99,7 @@ export function prepareRenderToReadableStream(
 ): PreparedRenderStream {
   const encoder = new TextEncoder();
   const prepared = Promise.withResolvers<readonly string[]>();
+  const head = Promise.withResolvers<readonly ServerHeadTag[]>();
   const queue: string[] = [];
   let cancelled = false;
   const drained = new Set<() => void>();
@@ -131,6 +138,7 @@ export function prepareRenderToReadableStream(
       await current.prepare();
       prepared.resolve(current.routeComponents());
       const root = current.mount() as unknown as StringRenderableNode;
+      head.resolve(current.pageHead());
       if (current.streamsRegions) return streamRegions(current, root, pushRegion);
       await current.settle();
       push(current.wrap(current.serialize(root)));
@@ -149,10 +157,12 @@ export function prepareRenderToReadableStream(
   // A failure before preparation completes rejects `prepared`; afterwards it
   // only rejects `ready` and the stream.
   work.catch(prepared.reject);
+  work.catch(head.reject);
   // Consumers observe failures through the stream, `prepared`, or `ready`;
   // never leave the internal promises unhandled when none is awaited.
   ready.catch(() => {});
   prepared.promise.catch(() => {});
+  head.promise.catch(() => {});
 
   const stream = new ReadableStream<Uint8Array>({
     async pull(controller) {
@@ -176,7 +186,7 @@ export function prepareRenderToReadableStream(
       return work.catch(() => {});
     },
   });
-  return { stream, prepared: prepared.promise, ready };
+  return { stream, prepared: prepared.promise, head: head.promise, ready };
 }
 
 export function renderToReadableStream(

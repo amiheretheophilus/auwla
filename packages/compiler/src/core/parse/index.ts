@@ -13,6 +13,7 @@ import { CompileError } from '../diagnostics';
 import { authoredError, moduleText, type SourceLanguage, type SourceStylesheet } from './languages';
 import { lowerTypeScript, type LoweredRequireImport } from './lower-typescript';
 import { lowerSlotsWithOrigin } from '../../features/slots/lower';
+import { lowerHeadWithOrigin } from '../../features/head/lower';
 import { composeOrigins, UNEDITED, type TextOrigin } from './text-edits';
 
 export type { LoweredRequireImport } from './lower-typescript';
@@ -69,16 +70,16 @@ function lowerModule(
 ): ParsedModule {
   const { text, lang } = written;
   if (lang !== 'ts' && lang !== 'tsx') {
-    const slots = hasJsx ? lowerSlotsWithOrigin(path, text) : { text, origin: UNEDITED };
+    const markup = hasJsx ? lowerMarkup(path, text) : { text, origin: UNEDITED };
     return {
       ...(written.stylesheet === undefined ? {} : { stylesheet: written.stylesheet }),
-      path, lang, authored, source: slots.text, origin: composeOrigins(slots.origin, written.origin),
+      path, lang, authored, source: markup.text, origin: composeOrigins(markup.origin, written.origin),
       hasJsx, requireImports: [], hasExportAssignment: false,
     };
   }
   const lowered = lowerTypeScript(program, text, lang, path);
-  // Slots become props (`features/slots/lower.ts`), on the text the TypeScript lowering left.
-  const slots = hasJsx ? lowerSlotsWithOrigin(path, lowered.source) : { text: lowered.source, origin: UNEDITED };
+  // Slots and `<head>` (`features/slots/`, `features/head/`), on the text the TypeScript lowering left.
+  const markup = hasJsx ? lowerMarkup(path, lowered.source) : { text: lowered.source, origin: UNEDITED };
   return {
     ...(written.stylesheet === undefined ? {} : { stylesheet: written.stylesheet }),
     path,
@@ -87,7 +88,14 @@ function lowerModule(
     hasJsx,
     requireImports: lowered.requireImports,
     hasExportAssignment: lowered.hasExportAssignment,
-    source: slots.text,
-    origin: composeOrigins(slots.origin, composeOrigins(lowered.origin, written.origin)),
+    source: markup.text,
+    origin: composeOrigins(markup.origin, composeOrigins(lowered.origin, written.origin)),
   };
+}
+
+/** Slots become props (`features/slots/lower.ts`), then `<head>` a value (`features/head/lower.ts`). */
+function lowerMarkup(path: string, source: string): { text: string; origin: TextOrigin } {
+  const slots = lowerSlotsWithOrigin(path, source);
+  const head = lowerHeadWithOrigin(path, slots.text);
+  return { text: head.text, origin: composeOrigins(head.origin, slots.origin) };
 }

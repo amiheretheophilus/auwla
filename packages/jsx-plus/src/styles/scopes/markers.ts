@@ -2,6 +2,8 @@ import { CompileError, inspectMarkup, type MarkupOwnership } from '@memoized-dom
 import type { StyleBlock } from '../blocks';
 import { assemble, insertGenerated, nearestAuthoredOffset, type Piece } from '../../source';
 
+const HEAD_TAGS = new Set(['title', 'meta', 'link']);
+
 /** Deterministic across client/server builds and CSS-only edits, without runtime IDs. */
 function attributeFor(filename: string, owner: string): string {
   const text = filename.replaceAll('\\', '/') + '\0' + owner;
@@ -61,6 +63,9 @@ export function markStyles(
 
   const insertions: { at: number; text: string }[] = [];
   for (const element of ownership.elements) {
+    // Head tags are never shown, so no style applies to them; in a `<head>` block they are copied
+    // into the document's head, where a scope attribute would only add noise.
+    if (HEAD_TAGS.has(element.tag)) continue;
     const names: string[] = moduleAttribute === undefined ? [] : [moduleAttribute];
     const owner = element.functions.find((index) => styled.has(index) || ownership.functions[index]!.component);
     const privateAttribute = owner === undefined ? undefined : styled.get(owner);

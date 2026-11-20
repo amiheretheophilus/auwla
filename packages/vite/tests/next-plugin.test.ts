@@ -194,6 +194,31 @@ describe('the Vite plugin', () => {
     }, { timeout: 15_000 });
   }, 60_000);
 
+  it('sends a page\'s <head> tags in its HTML, keeping the template\'s title for the browser', async () => {
+    write('headed/index.html', '<!doctype html><html><head><title>Site</title></head><body><div id="root"><!--ssr-outlet--></div><script type="module" src="/src/main.ts"></script></body></html>');
+    write('headed/src/main.ts', `import { mount } from '@memoized-dom/runtime';\nimport { Page } from './Page';\nmount('root', Page);\n`);
+    write('headed/src/Page.tsx', `export function Page() { const name = 'Pricing'; return <main><head><title>{name + ' · Site'}</title><meta name="description" content="Plans" /></head><h1>{name}</h1></main>; }`);
+    write('headed/server.ts', `import { serve } from '@memoized-dom/server';\nimport { Page } from './src/Page';\nimport { define } from '#server/define';\nconst app = serve({ define });\napp.ssr(Page);\nexport default app;\n`);
+    write('headed/server/define.ts', `import { createDefine } from '@memoized-dom/server';\nexport const define = createDefine();\n`);
+
+    nativeServer = await createDevServer({
+      root: join(root, 'headed'),
+      configFile: false,
+      logLevel: 'silent',
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server' })],
+      server: { host: '127.0.0.1', port: 0 },
+    });
+    const page = await (await fetch(`${nativeServer.origin}/`)).text();
+    const head = page.slice(0, page.indexOf('</head>'));
+
+    expect(head).toContain('<title data-mmd-head>Pricing · Site</title>');
+    expect(head).toContain('<meta name="description" content="Plans" data-mmd-head>');
+    expect(head).toContain('<template data-mmd-head-original><title>Site</title></template>');
+    // Nothing is left where <head> was written in the page.
+    expect(page).toContain('<h1>Pricing</h1>');
+    expect(page.slice(page.indexOf('</head>'))).not.toContain('<title');
+  }, 60_000);
+
   it('starts while a page fails to compile, shows the error, and renders the page once it is fixed', async () => {
     write('starts-broken/index.html', '<!doctype html><html><head></head><body><div id="root"><!--ssr-outlet--></div><script type="module" src="/src/main.ts"></script></body></html>');
     write('starts-broken/src/main.ts', `import { mount } from '@memoized-dom/runtime';\nimport { Page } from './Page';\nmount('root', Page);\n`);

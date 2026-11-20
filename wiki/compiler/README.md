@@ -157,6 +157,7 @@ One page per group of related files:
 | [linking.md](linking.md) | several modules, module state, routes, server functions |
 | [project.md](project.md) | compiling an app from its entries: collecting modules, rebuilding after edits |
 | [server.md](server.md) | server functions, and the client and server builds of an application |
+| [head.md](head.md) | `<head>` in a component: page titles and meta tags, in the browser and the server's HTML |
 | [stale.md](stale.md) | stale checks in development: finding a derived value an unseen edit left out of date |
 | [delivery.md](delivery.md) | shipping as little JavaScript as possible: static pages, adoption, the old compiler's baseline |
 | [testing.md](testing.md) | how the compiler is tested, locally and on CI |
