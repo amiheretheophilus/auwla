@@ -58,7 +58,15 @@ export function PricingRoute() {
     return { member: null };
   });
 
-  return <PricingPage member={page.member} plans={plansOnSale()} />;
+  return (
+    <>
+      <head>
+        <title>"Pricing · Triaxis"</title>
+        <meta name="description" content="Plans for one axis or all three: forex, crypto and synthetics signals." />
+      </head>
+      <PricingPage member={page.member} plans={plansOnSale()} />
+    </>
+  );
 }
 
 /** `/sign-in`. Someone who is already signed in goes straight on. */
@@ -77,6 +85,9 @@ export function MemberSignIn() {
       lede="Forex, crypto and synthetics signals, checked before they reach you."
       title="Sign in"
       text="Use the email and password you signed up with.">
+      <head>
+        <title>"Sign in · Triaxis"</title>
+      </head>
       <MemberHeader slot="header" member={null} />
       <MemberSignInForm plan={ready.plan} />
     </AuthSplit>
@@ -99,6 +110,9 @@ export function MemberSignUp() {
       lede="One axis or all three. Every signal passes its checks before it reaches you."
       title="Create your account"
       text="Then pick a plan. Your signals open as soon as your payment is approved.">
+      <head>
+        <title>"Create your account · Triaxis"</title>
+      </head>
       <MemberHeader slot="header" member={null} />
       <MemberSignUpForm plan={ready.plan} />
     </AuthSplit>
@@ -121,6 +135,9 @@ export function MemberApp() {
 
   return (
     <MemberShell member={home.member}>
+      <head>
+        <title>"Your signals · Triaxis"</title>
+      </head>
       <MemberDashboard home=home />
     </MemberShell>
   );
@@ -146,6 +163,9 @@ export function MemberSubscribe() {
 
   return (
     <MemberShell member={page.member}>
+      <head>
+        <title>"Subscribe · Triaxis"</title>
+      </head>
       <SubscribePage plans={plansOnSale()} chosen={page.plan} chosenAxis={page.axis} access={page.access} instructions={page.instructions} payments={page.payments} />
     </MemberShell>
   );

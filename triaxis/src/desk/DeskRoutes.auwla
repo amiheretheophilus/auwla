@@ -7,6 +7,7 @@ import { SignInPage } from './auth/SignInPage.auwla';
 import { AnalysesBoard } from './board/AnalysesBoard.auwla';
 import { AnalysisEditor } from './draft/AnalysisEditor.auwla';
 import { DeskShell } from './layout/DeskShell.auwla';
+import type { AnalysisDetail } from './analysis';
 
 <style>
   .missing {
@@ -39,9 +40,23 @@ export function AnalystDesk() {
 
   return (
     <DeskShell staff={desk.staff}>
+      <head>
+        <title>"Analyses · Triaxis Desk"</title>
+      </head>
       <AnalysesBoard staff={desk.staff} analyses={desk.analyses} authors={desk.authors} />
     </DeskShell>
   );
+}
+
+/** An open analysis's tab title: its market, once one is picked. */
+function analysisTitle(analysis: AnalysisDetail | null): string {
+  if (analysis === null) {
+    return 'Analysis not found · Triaxis Desk';
+  }
+  if (analysis.fields.symbol === '') {
+    return `Analysis #${analysis.id} · Triaxis Desk`;
+  }
+  return `${analysis.fields.symbol} · Triaxis Desk`;
 }
 
 /** `/desk/analyses/:id`: one analysis, editable by its author or an admin. */
@@ -54,6 +69,9 @@ export function AnalysisPage() {
 
   return (
     <DeskShell staff={page.staff}>
+      <head>
+        <title>analysisTitle(page.analysis)</title>
+      </head>
       if (page.analysis) {
         <AnalysisEditor staff={page.staff} initial={page.analysis} />
       } else {
@@ -78,6 +96,9 @@ export function PaymentsPage() {
 
   return (
     <DeskShell staff={page.staff}>
+      <head>
+        <title>"Payments · Triaxis Desk"</title>
+      </head>
       <PaymentsBoard staff={page.staff} initial={page.payments} />
     </DeskShell>
   );
@@ -89,5 +110,12 @@ export function DeskSignIn() {
     return authConfigured();
   });
 
-  return <SignInPage enabled=enabled />;
+  return (
+    <>
+      <head>
+        <title>"Staff sign in · Triaxis"</title>
+      </head>
+      <SignInPage enabled=enabled />
+    </>
+  );
 }

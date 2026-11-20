@@ -215,6 +215,9 @@ function MarketHome() {
 
   return (
     <div class="site-page" id="top">
+      <head>
+        <title>"Triaxis · Forex, crypto and synthetics signals"</title>
+      </head>
       <header class="site-header">
         <a class="wordmark" href="#top" aria-label="Triaxis, back to top">
           <span class="wordmark__mark" aria-hidden="true">
