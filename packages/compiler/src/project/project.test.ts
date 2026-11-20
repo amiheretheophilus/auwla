@@ -169,4 +169,13 @@ describe('fileSystemHost', () => {
     expect([...build.modules].sort()).toEqual(['./src/App.tsx', './src/Title/index.tsx']);
     expect(projectPath(root, join(root, 'src', 'App.tsx'))).toBe('./src/App.tsx');
   });
+
+  it("settles the runtime's own modules itself, so a bundler's resolver is never asked for them", async () => {
+    const host = fileSystemHost(tmpdir());
+    for (const specifier of ['node:fs', 'fs', 'path/posix', 'bun:sqlite', 'cloudflare:workers']) {
+      expect(await host.resolve!(specifier, './server/storage.ts')).toBe(false);
+    }
+    // Anything else is still left to the default rule or the bundler.
+    expect(await host.resolve!('some-package', './src/App.tsx')).toBeUndefined();
+  });
 });

@@ -6,6 +6,7 @@
  * host backed by its own resolver and file cache; `fileSystemHost` reads a folder on disk.
  */
 import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { isBuiltin } from 'node:module';
 import { join, relative, sep } from 'node:path';
 import { nativePackageResolver } from './packages/native';
 
@@ -38,6 +39,9 @@ export function fileSystemHost(root: string): ProjectHost {
   let realRoot: string | undefined;
   return {
     resolve(specifier, importer) {
+      // Settled here, so a bundler's resolver is never asked: Vite's, from the client build,
+      // warns about every server module's `node:fs` as if it were bound for the browser.
+      if (runtimeBuiltin(specifier)) return false;
       const file = packages.resolve(specifier, join(root, importer));
       if (file === undefined) return undefined;
       realRoot ??= realpathSync.native(root);
@@ -58,6 +62,14 @@ export function fileSystemHost(root: string): ProjectHost {
         .sort();
     },
   };
+}
+
+/**
+ * A module the runtime itself provides: `node:fs` or `fs`, `bun:sqlite`, `cloudflare:workers`.
+ * The project never compiles one.
+ */
+function runtimeBuiltin(specifier: string): boolean {
+  return /^(node|bun|cloudflare):/.test(specifier) || isBuiltin(specifier);
 }
 
 /**

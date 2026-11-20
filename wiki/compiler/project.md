@@ -26,7 +26,10 @@ const update = await project.update(['./src/Title.tsx']);   // { build, changed,
   the only modules whose exports code outside the program uses.
 - The **host** turns project paths (`./src/App.tsx`, the keys `compileModules` takes) into text,
   and may resolve imports the default rule does not (path aliases). `fileSystemHost(root)` reads
-  a folder under Node or Bun; a bundler plugin gives a host over its own resolver.
+  a folder under Node or Bun; a bundler plugin gives a host over its own resolver. It settles a
+  runtime's own module (`node:fs`, `fs`, `bun:sqlite`, `cloudflare:workers`) as not compiled
+  itself, so a bundler's resolver is never asked: Vite's, during the client build, warned until
+  2026-11-20 that each server module's `node:fs` was "externalized for browser compatibility".
 - A build follows static imports, re-exports, `import()` of a literal and `import x = require()`
   from the entries. Type-only imports are erased and bring no module. A package, or a file that
   is not source (`./styles.css`), is left in the output for the bundler.
