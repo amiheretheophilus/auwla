@@ -27,18 +27,28 @@ const passes: readonly Optimization[] = [
   closedLists, routeRegions, textFusion,
 ];
 
+/** `enabled`: all passes, none, or all but the named ones (`CompileModulesOptions.optimize`). */
 export function optimizeModules(
   plans: readonly ModulePlan[],
   graph: SemanticGraph,
-  enabled = true,
+  enabled: boolean | { readonly skip: readonly string[] } = true,
 ): readonly ModulePlan[] {
-  if (!enabled || passes.length === 0) {
+  if (enabled === false) {
+    return plans;
+  }
+  const skipped = new Set(enabled === true ? [] : enabled.skip);
+  const unknown = [...skipped].filter((name) => !passes.some((pass) => pass.name === name));
+  if (unknown.length > 0) {
+    throw new Error(`optimize.skip names no pass: ${unknown.join(', ')}`);
+  }
+  const running = passes.filter((pass) => !skipped.has(pass.name));
+  if (running.length === 0) {
     return plans;
   }
 
   return plans.map((general) => {
     let current = general;
-    for (const pass of passes) {
+    for (const pass of running) {
       current = pass.match(current, graph) ?? current;
     }
     return current;

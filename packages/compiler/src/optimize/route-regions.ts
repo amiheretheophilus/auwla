@@ -13,8 +13,8 @@
  * from the router, and the branch it picks shows one value site, a component element. Anything
  * else keeps the general path.
  */
-import { is } from 'yuku-ast';
-import type { Module } from 'yuku-analyzer';
+import { is, walk } from 'yuku-ast';
+import type { Binding, Module } from 'yuku-analyzer';
 import type { Expression, Node } from 'yuku-parser';
 import type { BindingNode } from '../core/graph';
 import type { ComponentPlan, ConditionalBranch, ConditionalSite, ModulePlan, Site, TextSite } from '../core/plan/model';
@@ -48,7 +48,22 @@ function componentValue(branch: ConditionalBranch | undefined): TextSite | null 
   return is.JSXElement(element) && intrinsicTag(element) === null ? site : null;
 }
 
-function routeRegion(module: Module, site: ConditionalSite): { readonly region: TextSite; readonly inner: Expression } | null {
+/** The bindings an expression reads by name. */
+function bindingsRead(module: Module, expression: Node): Set<Binding> {
+  const read = new Set<Binding>();
+  walk(expression, { enter: (node) => {
+    if (!is.Identifier(node)) return;
+    const binding = module.referenceOf(node)?.binding ?? null;
+    if (binding !== null) read.add(binding);
+  } });
+  return read;
+}
+
+function routeRegion(
+  module: Module,
+  site: ConditionalSite,
+  siteInputs: ComponentPlan['siteInputs'],
+): { readonly region: TextSite; readonly inner: Expression } | null {
   const selection = site.selection;
   if (selection.kind !== 'logical' || selection.operator !== '&&' || selection.right.kind !== 'branch') return null;
   if (!routeRegionCall(module, selection.left)) return null;
@@ -56,19 +71,27 @@ function routeRegion(module: Module, site: ConditionalSite): { readonly region: 
   const inner = componentValue(site.branches[selection.right.index]);
   if (inner === null) return null;
 
+  // The component's props matter only while the region shows it: unmatched, the value is the
+  // left side's null, whatever they are. What the region id reads (a route context) always counts.
+  const left = bindingsRead(module, selection.left);
+  const whileShown = (siteInputs.get(inner.expression) ?? []).filter((input) => !left.has(input.binding));
+
   return {
-    region: { kind: 'text', node: site.node, expression: site.expression, reactive: site.reactive, primitive: false },
+    region: {
+      kind: 'text', node: site.node, expression: site.expression, reactive: site.reactive, primitive: false,
+      ...(whileShown.length === 0 ? {} : { whileShown }),
+    },
     inner: inner.expression,
   };
 }
 
 /** Replace route regions in a view, and in the branches of its other conditionals. */
-function replaceSites(module: Module, sites: readonly Site[], merged: Merged): readonly Site[] {
+function replaceSites(module: Module, sites: readonly Site[], merged: Merged, siteInputs: ComponentPlan['siteInputs']): readonly Site[] {
   let changed = false;
   const next = sites.map((site): Site => {
     if (site.kind !== 'conditional') return site;
 
-    const replaced = routeRegion(module, site);
+    const replaced = routeRegion(module, site, siteInputs);
     if (replaced !== null) {
       changed = true;
       merged.set(site.expression, replaced.inner);
@@ -76,7 +99,7 @@ function replaceSites(module: Module, sites: readonly Site[], merged: Merged): r
     }
 
     const branches = site.branches.map((branch): ConditionalBranch => {
-      const nested = replaceSites(module, branch.sites, merged);
+      const nested = replaceSites(module, branch.sites, merged, siteInputs);
       return nested === branch.sites ? branch : { ...branch, sites: nested };
     });
     if (branches.every((branch, index) => branch === site.branches[index])) return site;
@@ -109,7 +132,7 @@ export const routeRegions: Optimization = {
 
     for (const [fn, component] of general.components) {
       const merged: Merged = new Map();
-      const sites = replaceSites(module, component.sites, merged);
+      const sites = replaceSites(module, component.sites, merged, component.siteInputs);
       if (sites === component.sites) continue;
 
       changed = true;

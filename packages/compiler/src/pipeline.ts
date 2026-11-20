@@ -123,7 +123,7 @@ function compileAnalyzed(
   options: CompileModulesOptions,
 ): { output: Record<string, string>; maps?: Record<string, SourceMap>; resolved: Resolved } {
   const general = planCapturedValues(planModules(graph, graph.queries, graph.components), resolved);
-  const plans = optimizeModules(general, graph, options.optimize !== false);
+  const plans = optimizeModules(general, graph, options.optimize ?? true);
   const opensNamespaces = markNamespaceReads(plans, resolved);
 
   const emitted = new Map<string, EmittedModule>();

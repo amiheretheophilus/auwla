@@ -14,7 +14,7 @@ const SOURCE = `
     </main>;
   }`;
 
-function compile(optimize: boolean): string {
+function compile(optimize: boolean | { readonly skip: readonly string[] }): string {
   return compileModules({ './App.tsx': SOURCE }, { optimize })['./App.tsx']!;
 }
 
@@ -30,4 +30,9 @@ it("shows a component's route region as one value slot, and leaves an element's"
   // The <section>'s region keeps its conditional: its branch clones a template.
   expect(conditionals(optimized)).toBe(1);
   expect(optimized).toMatch(/\$routeRegion\("[^"]*About[^"]*"\) && /);
+});
+
+it('can be left out alone, which the navigation benchmark times it against', () => {
+  expect(conditionals(compile({ skip: ['route-regions'] }))).toBe(2);
+  expect(() => compile({ skip: ['route-region'] })).toThrow('optimize.skip names no pass: route-region');
 });

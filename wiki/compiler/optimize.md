@@ -49,7 +49,9 @@ interface Optimization {
    `d6e678b` baseline (`testing.md`).
 5. **Optimizations run after the plan is built and before emission**, in the order
    listed in `optimize/index.ts`. `compileModules(..., { optimize: false })`
-   bypasses all optional passes. The comparison harness emits both strategies,
+   bypasses all optional passes; `{ optimize: { skip: ['route-regions'] } }` leaves out the
+   named ones, so a benchmark can time one pass against the same build without it
+   (`bench/navigation`). An unknown name is an error. The comparison harness emits both strategies,
    into `next/` and `next-general/`, and checks both against the reference.
 6. **Correct first.** A case gets its general path, with tests, before any fast path
    for it is ported.

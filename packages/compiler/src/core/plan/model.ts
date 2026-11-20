@@ -77,6 +77,12 @@ export interface TextSite extends SiteBase {
   readonly guardDisposal?: boolean;
   /** `{...items}`: each item is a child, so the site shows `[...items]`. */
   readonly spread?: boolean;
+  /**
+   * Optional (`optimize/route-regions.ts`): inputs that matter only while the site's value is
+   * truthy. In `left && <X a={a} />`, a change of `a` cannot change a falsy value, so the site skips
+   * it then; the left side's own inputs are not here and always count.
+   */
+  readonly whileShown?: readonly BindingNode[];
 }
 
 /**

@@ -180,6 +180,12 @@ export function emitSites(
         inputs.add(version);
       }
     }
+    // Versions that matter only while the value is truthy (`TextSite.whileShown`).
+    const whileShown = new Set<string>();
+    for (const binding of site.kind === 'text' && context.values === undefined ? site.whileShown ?? [] : []) {
+      const version = versions.get(binding);
+      if (version !== undefined && inputs.has(version)) whileShown.add(version);
+    }
     const updates = !rowLiteral && (inputs.size > 0 || computation !== null || replays);
     const eventBatch = batch === null ? buildExpression('null') : buildExpression(batch);
     if (site.kind === 'event' && used && rowLiteral && batch !== null) {
@@ -325,7 +331,8 @@ export function emitSites(
     // Consecutive sites with the same inputs share one version check. The first
     // site's snapshot is the earliest, so a write while a later one mounts still
     // re-runs the whole group.
-    const groupKey = computation === null && !replays && !routed && inputs.size > 0 ? [...inputs].sort().join() : null;
+    const groupKey = computation === null && !replays && !routed && inputs.size > 0 && whileShown.size === 0
+      ? [...inputs].sort().join() : null;
     const open: SiteGroup | null = group;
     const joined: SiteGroup | null = groupKey !== null && open?.key === groupKey ? open : null;
     const snapshots: { version: string; seen: string }[] = joined === null
@@ -368,7 +375,11 @@ export function emitSites(
     } else {
       const tail = snapshots.map(({ version, seen }) => statement('$$seen = $$version;', { seen, version }));
       body.push(...tail);
-      const conditions = snapshots.map(({ version, seen }) => `${version} !== ${seen}`);
+      // A falsy value skips the versions only a shown value reads. Their snapshots catch up the
+      // next time the body runs, which reads them all afresh.
+      const conditions = snapshots.map(({ version, seen }) => whileShown.has(version)
+        ? `(${value} && ${version} !== ${seen})`
+        : `${version} !== ${seen}`);
       if (computation !== null) {
         conditions.push(`${computation}.changed()`);
       }

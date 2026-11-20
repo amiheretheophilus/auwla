@@ -8,8 +8,12 @@ import type { SourceLanguage } from './core/parse/languages';
  * (`wiki/compiler/plan.md`). Unknown options are ignored.
  */
 export interface CompileModulesOptions {
-  /** Disable optional plan fast paths to retain the general implementation. */
-  readonly optimize?: boolean;
+  /**
+   * Disable optional plan fast paths to retain the general implementation: `false` for all of them,
+   * or `{ skip: ['route-regions'] }` for the named passes (`optimize/index.ts`), which a benchmark
+   * uses to time one pass against the same output without it.
+   */
+  readonly optimize?: boolean | { readonly skip: readonly string[] };
   /** The runtime module the emitted code imports. Default `@memoized-dom/runtime`. */
   readonly runtimePath?: string;
   /**

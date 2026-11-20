@@ -29,6 +29,28 @@ behaves('routes: a region shows while its route matches, and a link navigates', 
   },
 });
 
+behaves('routes: a page shown again has the props they changed to while it was hidden', {
+  // A route region skips its component's props while it shows nothing (`optimize/route-regions.ts`,
+  // `whileShown`); shown again, the page must still have the latest value.
+  url: '/a',
+  source: `
+    function Page({ name, count }) { return <p id="page">{name} {count}</p>; }
+    export function App() {
+      let count = 0;
+      return <main>
+        <button id="bump" onClick={() => count++}>bump</button>
+        <a id="to-a" route-to="/a">A</a>
+        <a id="to-b" route-to="/b">B</a>
+        <Page route="/a" name="a" count={count} />
+        <Page route="/b" name="b" count={count} />
+      </main>;
+    }`,
+  steps: [{ click: '#bump' }, { click: '#to-b' }, { click: '#bump' }, { click: '#bump' }, { click: '#to-a' }, { click: '#bump' }],
+  check(container, observation) {
+    expect(text(container, '#page')).toBe(['a 0', 'a 1', 'b 1', 'b 2', 'b 3', 'a 3', 'a 4'][observation]!);
+  },
+});
+
 behaves('routes: a layout stays mounted while the routes inside it change', {
   url: '/settings/profile',
   source: `
