@@ -129,9 +129,11 @@ function connectActive(): void {
  * it, on this runtime and every one activated later, and make clicks on route links navigate.
  * One call keeps the table out of the module's own bindings. `basePath`: the prefix the
  * application is mounted at (`/app`, the compiler's `base` option), set before the table matches.
+ * A table without one is mounted at `/`, even after one that had a base (a hot update that
+ * removed it): an application has one table, and its base comes with it.
  */
 export function installRouteTable(entries: readonly PreparedRouteEntry[], basePath?: string): void {
-  if (basePath !== undefined) setApplicationBasePath(basePath);
+  setApplicationBasePath(basePath ?? null);
   const match = createPreparedRouteMatcher(entries);
   notePreparedManifestResolver((location) => match(location.pathname));
   ensureRouterConnected();

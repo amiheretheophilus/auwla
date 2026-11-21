@@ -3,9 +3,10 @@
  * `installRouteTable`, which mounts the runtime already made and every one activated later.
  * Its own file: a base, once declared, belongs to the process, as the table does.
  */
-import { afterEach, describe, expect, it } from 'bun:test';
+import { afterAll, afterEach, describe, expect, it } from 'bun:test';
 import { createMemoryRouteHistory, createRouteRuntime, setActiveRouteRuntime, type RouteRuntime } from '../src/index';
 import { installRouteTable } from '../src/internal';
+import { setApplicationBasePath } from '../src/active-runtime';
 
 const runtimes: RouteRuntime[] = [];
 
@@ -87,4 +88,26 @@ describe('a base path', () => {
     const own = activate(createRouteRuntime({ ...at('http://localhost/mine'), routes: [{ id: 'mine', pattern: '/mine' }] }));
     expect(own.route.pathname).toBe('/mine');
   });
+
+  it('is removed by a table installed again without one, as a hot update that drops it gives', () => {
+    const history = createMemoryRouteHistory({ initialEntries: ['/app/projects/one'] });
+    const browser = activate(createRouteRuntime({ routeHistory: history }));
+    installRouteTable(TABLE, '/app');
+    expect(browser.route.pathname).toBe('/projects/one');
+
+    installRouteTable(TABLE);
+    expect(browser.route.pathname).toBe('/app/projects/one');
+    expect(browser.route.matches).toEqual([]);
+    browser.navigate('/projects/two');
+    expect(new URL(history.location.href).pathname).toBe('/projects/two');
+    expect(browser.route.matches.map((match) => match.id)).toEqual(['project']);
+
+    // A runtime activated later is mounted at `/` too.
+    const request = activate(createRouteRuntime(at('http://localhost/projects/three')));
+    expect(request.route.params).toEqual({ projectId: 'three' });
+    history.destroy();
+  });
 });
+
+// Every test file shares the process, and a base belongs to the process: leave none behind.
+afterAll(() => setApplicationBasePath(null));

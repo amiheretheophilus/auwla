@@ -77,8 +77,16 @@ const basePathApplied = new WeakMap<RouteRuntime, string>();
 
 /** Gives `runtime` the application's base, like the table: a runtime with routes of its own keeps its own. */
 function replayBasePath(runtime: RouteRuntime): void {
-  if (applicationBasePath === null || hasOwnRoutes(runtime)) return;
-  if (basePathApplied.get(runtime) === applicationBasePath) return;
+  if (hasOwnRoutes(runtime)) return;
+  const applied = basePathApplied.get(runtime);
+  if (applicationBasePath === null) {
+    // Mounted at `/` again (a table installed without a base): undo a base this gave it.
+    if (applied === undefined) return;
+    basePathApplied.delete(runtime);
+    runtime.replaceBasePath('/');
+    return;
+  }
+  if (applied === applicationBasePath) return;
   basePathApplied.set(runtime, applicationBasePath);
   runtime.replaceBasePath(applicationBasePath);
 }
@@ -86,9 +94,11 @@ function replayBasePath(runtime: RouteRuntime): void {
 /**
  * Mounts the application at `basePath` (`/app`): the active runtime now, and every runtime
  * activated later (a server request's). Route pathnames are then read below the base, `navigate`
- * and `route-to` write it in front, and a link outside it is a document navigation.
+ * and `route-to` write it in front, and a link outside it is a document navigation. Null mounts
+ * it at `/`, as a table compiled without a base does, so removing `base` takes effect on a hot
+ * update.
  */
-export function setApplicationBasePath(basePath: string): void {
+export function setApplicationBasePath(basePath: string | null): void {
   applicationBasePath = basePath;
   replayBasePath(getActiveRouteRuntime());
 }

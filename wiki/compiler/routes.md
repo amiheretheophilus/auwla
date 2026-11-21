@@ -235,7 +235,9 @@ written from `/`; the prefix belongs to where the app is served, not to its rout
   (`packages/router/src/active-runtime.ts`): the runtime made before any application code ran
   (the browser's default one) reads its pathname again under the base (`replaceBasePath`,
   `runtime.ts`), and every runtime activated later gets it before the table, as a server request's
-  does. A runtime with routes of its own keeps its own base, as it keeps its own routes.
+  does. A runtime with routes of its own keeps its own base, as it keeps its own routes. A table
+  without the argument mounts the application at `/` again (2026-11-21): an application has one
+  table, so a hot update that removed `base` must not keep the old prefix.
   `navigate('/about')` writes the base in front; a link outside the base is a document navigation.
 - **No base, or `/`**, adds nothing: the output is byte for byte what it was.
 - A base must be a path (`./` and full URLs only place assets) with no parameter, wildcard, query
