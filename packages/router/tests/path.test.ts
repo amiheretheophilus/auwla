@@ -14,6 +14,24 @@ import {
   validateRoutePatterns,
 } from '../src';
 import type { RouteParams } from '../src';
+import { sameOrigin } from '../src/path';
+
+describe('same origin', () => {
+  it('agrees with URL.origin for every pair, without reading it for http(s)', () => {
+    const urls = [
+      'http://example.com/a', 'http://example.com:80/b?q#h', 'http://EXAMPLE.com/c', 'http://user:pw@example.com/',
+      'http://example.com:8080/', 'https://example.com/', 'https://example.com:443/x', 'https://example.com:8443/',
+      'http://sub.example.com/', 'http://[::1]/', 'http://[0:0::1]:80/', 'http://127.0.0.1/', 'http://2130706433/',
+      'file:///a', 'file:///b', 'file://host/c', 'blob:http://example.com/1', 'data:text/plain,hi', 'about:blank',
+      'ws://example.com/', 'mailto:someone@example.com',
+    ].map((href) => new URL(href));
+    for (const first of urls) {
+      for (const second of urls) {
+        expect([first.href, second.href, sameOrigin(first, second)]).toEqual([first.href, second.href, first.origin === second.origin]);
+      }
+    }
+  });
+});
 
 describe('route paths', () => {
   it('shares templates safely between interpolation and exact/prefix matching', () => {

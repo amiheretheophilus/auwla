@@ -51,5 +51,10 @@ describe('a compiled route table', () => {
     // The same routes, so nothing a route read sees changes; a hot update or a fresh app.
     installRouteTable(table({ version: 2 }));
     expect(runtime.route.matches[0]!.metadata).toEqual({ version: 2 });
+
+    // A query change keeps the matches it has, which are the new table's.
+    runtime.navigate('/page', { query: { tab: 'top' } });
+    expect(runtime.route.search).toBe('?tab=top');
+    expect(runtime.route.matches[0]!.metadata).toEqual({ version: 2 });
   });
 });

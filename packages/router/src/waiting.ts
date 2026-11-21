@@ -13,6 +13,7 @@
  * The framework writes attributes, never classes: `class` is the author's, and their components
  * write it again whenever its value changes.
  */
+import { sameOrigin } from './path';
 import type { RouteNavigationLocation } from './types';
 
 export interface WaitingOptions {
@@ -92,7 +93,7 @@ export function createWaiting(options: WaitingOptions): Waiting {
 function sameDocument(href: string, target: URL): boolean {
   try {
     const url = new URL(href);
-    return url.origin === target.origin && url.pathname === target.pathname && url.search === target.search;
+    return sameOrigin(url, target) && url.pathname === target.pathname && url.search === target.search;
   } catch {
     return false;
   }

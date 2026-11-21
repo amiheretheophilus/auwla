@@ -293,6 +293,30 @@ describe('route runtime', () => {
     runtime.dispose();
   });
 
+  it('keeps the same matches and params through a query or hash change, and not a new param', () => {
+    // What reads them sees the same objects, so no route region works out its identity again.
+    const runtime = createRouteRuntime({
+      environment: {},
+      routeHistory: createMemoryRouteHistory({ initialEntries: ['/posts/1'] }),
+      routes: [{ id: 'post', pattern: '/posts/:id' }],
+    });
+    const matches = runtime.route.matches;
+    const params = runtime.route.params;
+
+    runtime.navigate('/posts/1', { query: { tab: 'new' } });
+    runtime.navigate('/posts/1', { query: { tab: 'top' }, hash: 'comments' });
+    expect(runtime.route.search).toBe('?tab=top');
+    expect(runtime.route.hash).toBe('#comments');
+    expect(runtime.route.matches).toBe(matches);
+    expect(runtime.route.params).toBe(params);
+
+    runtime.navigate('/posts/2');
+    expect(runtime.route.matches).not.toBe(matches);
+    expect(runtime.route.matches[0]!.pathname).toBe('/posts/2');
+    expect(runtime.route.params).toEqual({ id: '2' });
+    runtime.dispose();
+  });
+
   it('reruns preparation when a hash navigation also changes route state', async () => {
     const prepare = vi.fn(() => 'ready');
     registerRoutedPreparation({ id: 'hash-state', server: false, prepare });

@@ -115,6 +115,21 @@ export function normalizeRoutePath(path: string): string {
 }
 
 const RELATIVE_ROUTE_ORIGIN = 'http://memoized-dom.relative';
+const RELATIVE_ROUTE_URL = new URL(RELATIVE_ROUTE_ORIGIN);
+
+/**
+ * @internal Whether two URLs have the same origin. Chromium builds `URL.origin` anew on every
+ * read, a security-origin object serialized to a string, which made it a tenth of a query-only
+ * navigation. An http(s) origin serializes as `protocol//host`, so comparing those two gives the
+ * same answer; any other scheme compares origins.
+ */
+export function sameOrigin(first: URL, second: URL): boolean {
+  const protocol = first.protocol;
+  if (protocol === second.protocol && (protocol === 'http:' || protocol === 'https:')) {
+    return first.host === second.host;
+  }
+  return first.origin === second.origin;
+}
 
 /**
  * Resolves a destination relative to a route pathname. Route paths are treated
@@ -123,7 +138,7 @@ const RELATIVE_ROUTE_ORIGIN = 'http://memoized-dom.relative';
  */
 export function resolveRoutePath(base: string, destination: string): string {
   const baseURL = new URL(base, RELATIVE_ROUTE_ORIGIN);
-  if (baseURL.origin !== RELATIVE_ROUTE_ORIGIN) {
+  if (!sameOrigin(baseURL, RELATIVE_ROUTE_URL)) {
     throw new TypeError(`Relative route base '${base}' must be same-origin`);
   }
 
@@ -140,7 +155,7 @@ export function resolveRoutePath(base: string, destination: string): string {
     next = new URL(destination, directory);
   }
 
-  if (next.origin !== RELATIVE_ROUTE_ORIGIN) {
+  if (!sameOrigin(next, RELATIVE_ROUTE_URL)) {
     throw new TypeError(`Relative route destination '${destination}' must be same-origin`);
   }
   return `${normalizeRoutePath(next.pathname)}${next.search}${next.hash}`;

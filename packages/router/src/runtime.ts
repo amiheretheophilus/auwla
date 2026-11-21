@@ -1,6 +1,7 @@
 import {
   normalizeRoutePath,
   resolveRoutePath,
+  sameOrigin,
   validateRoutePattern,
 } from './path';
 import { createScrollCoordinator } from './scroll';
@@ -41,6 +42,7 @@ import type {
 } from './types';
 
 const FALLBACK_ORIGIN = 'http://memoized-dom.local';
+const FALLBACK_URL = new URL(FALLBACK_ORIGIN);
 
 export interface RouteEnvironment {
   readonly location?: Location;
@@ -240,6 +242,18 @@ function sameMatches(
       keys.every(key => match.params[key] === other.params[key]);
   });
 }
+
+/**
+ * The same matches from the same route table: each match's metadata is the table entry's own
+ * object, so a table evaluated again gives other metadata over the same routes.
+ */
+function sameMatchesAndTable(
+  first: readonly RouteMatch[],
+  second: readonly RouteMatch[],
+): boolean {
+  return sameMatches(first, second) && first.every((match, index) => match.metadata === second[index]!.metadata);
+}
+
 function wrapHistoryState(userState: unknown, key: string, index: number): unknown {
   return { __mmd_val: userState, __mmd_key: key, __mmd_index: index };
 }
@@ -297,7 +311,7 @@ export function createRouteRuntime(
 
   function applicationURL(href: string): URL {
     const destination = new URL(href, FALLBACK_ORIGIN);
-    if (destination.origin !== FALLBACK_ORIGIN) {
+    if (!sameOrigin(destination, FALLBACK_URL)) {
       throw new TypeError(`Route destination '${href}' must be application-relative`);
     }
     const routePath = normalizeRoutePath(destination.pathname);
@@ -589,8 +603,13 @@ export function createRouteRuntime(
       }
       throw error;
     }
-    matches = prepared.matches;
-    params = prepared.params;
+    // A query or hash change matches the same routes. Keeping the published arrays keeps them the
+    // same objects for whatever reads them, so no route region works out its identity again
+    // (`region-identity.ts`).
+    if (!sameMatchesAndTable(previousMatches, prepared.matches)) {
+      matches = prepared.matches;
+      params = prepared.params;
+    }
     if (hadAccessedController) {
       previousController.abort();
     }
@@ -641,7 +660,7 @@ export function createRouteRuntime(
     locationURL: URL,
     locationState: unknown,
   ): RouteNavigationLocation {
-    if (locationURL.origin !== url.origin) {
+    if (!sameOrigin(locationURL, url)) {
       throw new TypeError(`Route destination '${locationURL.href}' must be same-origin`);
     }
     const routePathname = applicationPathname(locationURL.pathname);
@@ -896,7 +915,7 @@ export function createRouteRuntime(
 
     const destination = new URL(anchor.href, url);
     if (
-      destination.origin !== url.origin ||
+      !sameOrigin(destination, url) ||
       applicationPathname(destination.pathname) === null ||
       (destination.protocol !== 'http:' && destination.protocol !== 'https:')
     ) return;
@@ -942,7 +961,7 @@ export function createRouteRuntime(
 
     const destination = new URL(navigationEvent.destination.url, url);
     if (
-      destination.origin !== url.origin ||
+      !sameOrigin(destination, url) ||
       applicationPathname(destination.pathname) === null
     ) return;
     const type: NavigationType = navigationEvent.navigationType === 'traverse'
