@@ -11,9 +11,12 @@ export interface ScrollPosition {
   readonly y: number;
 }
 
-const SESSION_STORAGE_PREFIX = '__mmd_scroll_';
-/** Outside the position prefix so it never collides with a history key. */
-const SESSION_STORAGE_INDEX = '__mmd_scroll#index';
+/**
+ * Every saved offset, as one JSON array of `[key, x, y]`, oldest first. It is read once, when a
+ * reload or a return to the document first needs an offset, and written once, when the page is
+ * hidden: navigating never touches storage, whose calls are synchronous.
+ */
+const SESSION_STORAGE_POSITIONS = '__mmd_scroll#positions';
 const MAX_SAVED_POSITIONS = 100;
 
 export interface ScrollCoordinatorOptions {
@@ -40,29 +43,23 @@ export interface ScrollCoordinator {
   dispose(): void;
 }
 
-function readSessionStorage(storage: Storage | undefined, key: string): ScrollPosition | undefined {
+/** The offsets an earlier document stored, oldest first. Invalid entries are skipped. */
+function readStoredPositions(storage: Storage): Array<[string, ScrollPosition]> {
+  const positions: Array<[string, ScrollPosition]> = [];
   try {
-    if (storage === undefined) return undefined;
-    const raw = storage.getItem(`${SESSION_STORAGE_PREFIX}${key}`);
-    if (raw === null) return undefined;
-    const parsed = JSON.parse(raw) as Partial<ScrollPosition>;
-    if (Number.isFinite(parsed?.x) && Number.isFinite(parsed?.y)) {
-      return { x: parsed.x!, y: parsed.y! };
+    const parsed: unknown = JSON.parse(storage.getItem(SESSION_STORAGE_POSITIONS) ?? '[]');
+    if (!Array.isArray(parsed)) return positions;
+    for (const entry of parsed) {
+      if (!Array.isArray(entry)) continue;
+      const [key, x, y] = entry as unknown[];
+      if (typeof key === 'string' && Number.isFinite(x) && Number.isFinite(y)) {
+        positions.push([key, { x: x as number, y: y as number }]);
+      }
     }
   } catch {
-    // Storage access may throw in restricted iframe / security environments.
+    // Restricted storage or a corrupted value starts with nothing saved.
   }
-  return undefined;
-}
-
-function readSessionIndex(storage: Storage): string[] {
-  try {
-    const parsed: unknown = JSON.parse(storage.getItem(SESSION_STORAGE_INDEX) ?? '[]');
-    if (Array.isArray(parsed)) return parsed.filter(key => typeof key === 'string');
-  } catch {
-    // Restricted storage or a corrupted index starts a fresh index.
-  }
-  return [];
+  return positions;
 }
 
 function findHashElement(doc: Document, hash: string): Element | null {
@@ -86,13 +83,17 @@ export function createScrollCoordinator(
   let storage: Storage | undefined;
   try { storage = win?.sessionStorage; } catch { /* Restricted storage. */ }
 
+  /** Offsets by history key, least recently saved first, at most `MAX_SAVED_POSITIONS`. */
   const memoryPositions = new Map<string, ScrollPosition>();
   /**
    * The offset each page (path and query) had when it was last left, for links back to it.
    * Memory only: a reload or a full-page sign-out starts every page at the top again.
    */
   const pagePositions = new Map<string, ScrollPosition>();
-  let storedKeys: string[] | null = null;
+  /** Whether the offsets in session storage have been merged into `memoryPositions`. */
+  let storageRead = false;
+  /** Whether `memoryPositions` has offsets session storage does not have yet. */
+  let unsaved = false;
   let activeKey: string | null = null;
   let activePage: string | null = null;
   /** The page shown when the current navigation began, set by `capture`. */
@@ -142,31 +143,52 @@ export function createScrollCoordinator(
     };
   }
 
-  /** Storage writes are synchronous, so they happen only when an entry is left or hidden. */
-  function persistPosition(key: string, pos: ScrollPosition): void {
+  /**
+   * Merges what an earlier document stored, once. Those offsets are older than any this document
+   * saved, so they go first, and this document's win for a key both have.
+   */
+  function readStorage(): void {
+    if (storageRead) return;
+    storageRead = true;
     if (storage === undefined) return;
-    storedKeys ??= readSessionIndex(storage);
-    const existing = storedKeys.indexOf(key);
-    if (existing !== -1) storedKeys.splice(existing, 1);
-    storedKeys.push(key);
+    const stored = readStoredPositions(storage);
+    if (stored.length === 0) return;
+    const saved = [...memoryPositions];
+    memoryPositions.clear();
+    for (const [key, position] of stored) memoryPositions.set(key, position);
+    // Deleting first moves this document's keys after the stored ones.
+    for (const [key] of saved) memoryPositions.delete(key);
+    for (const [key, position] of saved) memoryPositions.set(key, position);
+    while (memoryPositions.size > MAX_SAVED_POSITIONS) {
+      memoryPositions.delete(memoryPositions.keys().next().value!);
+    }
+  }
+
+  /**
+   * Stores every saved offset, so a reload, or a return to this document from another, can
+   * restore any entry of it. It runs when the page is hidden, which comes before either.
+   */
+  function writeStorage(): void {
+    if (storage === undefined || !unsaved) return;
+    readStorage();
+    const entries: Array<[string, number, number]> = [];
+    for (const [key, position] of memoryPositions) entries.push([key, position.x, position.y]);
     try {
-      while (storedKeys.length > MAX_SAVED_POSITIONS) {
-        storage.removeItem(`${SESSION_STORAGE_PREFIX}${storedKeys.shift()!}`);
-      }
-      storage.setItem(`${SESSION_STORAGE_PREFIX}${key}`, JSON.stringify(pos));
-      storage.setItem(SESSION_STORAGE_INDEX, JSON.stringify(storedKeys));
+      storage.setItem(SESSION_STORAGE_POSITIONS, JSON.stringify(entries));
+      unsaved = false;
     } catch {
       // QuotaExceeded or restricted storage — fail silently.
     }
   }
 
-  function savePosition(key: string, pos: ScrollPosition, persist: boolean): void {
-    if (!memoryPositions.has(key) && memoryPositions.size >= MAX_SAVED_POSITIONS) {
-      const oldestKey = memoryPositions.keys().next().value;
-      if (oldestKey !== undefined) memoryPositions.delete(oldestKey);
+  function savePosition(key: string, pos: ScrollPosition): void {
+    // Saved again, an entry becomes the newest, so the bound drops the one left longest ago.
+    memoryPositions.delete(key);
+    if (memoryPositions.size >= MAX_SAVED_POSITIONS) {
+      memoryPositions.delete(memoryPositions.keys().next().value!);
     }
     memoryPositions.set(key, pos);
-    if (persist) persistPosition(key, pos);
+    unsaved = true;
   }
 
   function pageOf(url: URL): string {
@@ -198,13 +220,9 @@ export function createScrollCoordinator(
 
   function getPosition(key: string): ScrollPosition | undefined {
     const memory = memoryPositions.get(key);
-    if (memory !== undefined) return memory;
-    const session = readSessionStorage(storage, key);
-    if (session !== undefined) {
-      memoryPositions.set(key, session);
-      return session;
-    }
-    return undefined;
+    if (memory !== undefined || storageRead) return memory;
+    readStorage();
+    return memoryPositions.get(key);
   }
 
   function onScroll(): void {
@@ -218,7 +236,7 @@ export function createScrollCoordinator(
       ran = true;
       pendingFrame = null;
       if (!disposed && key === activeKey && token === generation) {
-        savePosition(key, currentPosition(), false);
+        savePosition(key, currentPosition());
       }
     };
     const handle = win?.requestAnimationFrame !== undefined
@@ -229,9 +247,9 @@ export function createScrollCoordinator(
 
   /** `pagehide` keeps back/forward cache eligibility, unlike `beforeunload`. */
   function onPageHide(): void {
-    if (activeKey !== null && !awaitingRestoration && !disposed) {
-      savePosition(activeKey, currentPosition(), true);
-    }
+    if (disposed) return;
+    if (activeKey !== null && !awaitingRestoration) savePosition(activeKey, currentPosition());
+    writeStorage();
   }
 
   function onVisibilityChange(): void {
@@ -265,7 +283,7 @@ export function createScrollCoordinator(
       if (awaitingRestoration && targetKey === activeKey) return;
       if (targetKey !== null && targetKey !== undefined) {
         const position = currentPosition();
-        savePosition(targetKey, position, true);
+        savePosition(targetKey, position);
         if (targetKey === activeKey && activePage !== null) rememberPage(activePage, position);
       }
     },
@@ -417,6 +435,8 @@ export function createScrollCoordinator(
 
     dispose() {
       if (disposed) return;
+      // A runtime created after this one in the same document can still restore its entries.
+      writeStorage();
       disconnectListeners?.();
       disposed = true;
       cancelRestore();

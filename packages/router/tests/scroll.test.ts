@@ -15,6 +15,15 @@ describe('scroll restoration coordinator', () => {
     document.body.replaceChildren();
   });
 
+  /** What an earlier document stored: `[key, x, y]` entries, oldest first. */
+  function seed(entries: Array<[string, number, number]>) {
+    sessionStorage.setItem('__mmd_scroll#positions', JSON.stringify(entries));
+  }
+
+  function stored(): Array<[string, number, number]> {
+    return JSON.parse(sessionStorage.getItem('__mmd_scroll#positions') ?? '[]');
+  }
+
   function deferredFrames() {
     const frames = new Map<number, FrameRequestCallback>();
     let sequence = 0;
@@ -93,7 +102,7 @@ describe('scroll restoration coordinator', () => {
   it('does not overwrite a saved destination offset with old DOM scroll while awaiting readiness', async () => {
     const frames = deferredFrames();
     spyOnAccessor(window, 'scrollY', 'get').mockReturnValue(10);
-    sessionStorage.setItem('__mmd_scroll_waiting', JSON.stringify({ x: 0, y: 750 }));
+    seed([['waiting', 0, 750]]);
     const coordinator = createScrollCoordinator();
     coordinator.connect();
     let ready!: () => void;
@@ -110,10 +119,10 @@ describe('scroll restoration coordinator', () => {
     coordinator.dispose();
   });
 
-  it('keeps scroll tracking in memory and persists only when the entry is left or hidden', () => {
+  it('keeps positions in memory while navigating, and stores them when the page is hidden', () => {
+    // Storage calls are synchronous, so scrolling and leaving entries never make them.
     const frames = deferredFrames();
     const position = spyOnAccessor(window, 'scrollY', 'get').mockReturnValue(300);
-    const setItem = vi.spyOn(Storage.prototype, 'setItem');
     const coordinator = createScrollCoordinator();
     coordinator.connect();
     coordinator.restore(new URL('http://localhost/feed'), 'load', 'feed');
@@ -121,34 +130,78 @@ describe('scroll restoration coordinator', () => {
       window.dispatchEvent(new Event('scroll'));
       frames.flush();
     }
-    expect(setItem).not.toHaveBeenCalled();
+    coordinator.capture('feed');
+    coordinator.restore(new URL('http://localhost/other'), 'push', 'other');
+    frames.flush();
+    expect(sessionStorage.length).toBe(0);
 
     position.mockReturnValue(450);
     window.dispatchEvent(new Event('pagehide'));
-    expect(JSON.parse(sessionStorage.getItem('__mmd_scroll_feed')!)).toEqual({ x: 0, y: 450 });
+    expect(stored()).toEqual([['feed', 0, 300], ['other', 0, 450]]);
 
-    position.mockReturnValue(500);
-    coordinator.capture('feed');
-    expect(JSON.parse(sessionStorage.getItem('__mmd_scroll_feed')!)).toEqual({ x: 0, y: 500 });
+    // A hidden tab may be discarded without a pagehide, so hiding it stores them too.
+    position.mockReturnValue(520);
+    const visibility = spyOnAccessor(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    document.dispatchEvent(new Event('visibilitychange'));
+    visibility.mockRestore();
+    expect(stored()).toEqual([['feed', 0, 300], ['other', 0, 520]]);
+
+    // Disposed with nothing saved since, there is nothing to write.
+    sessionStorage.clear();
     coordinator.dispose();
+    expect(sessionStorage.length).toBe(0);
   });
 
-  it('bounds persisted positions in session storage', () => {
+  it('restores an entry left inside the app after the document reloads', () => {
+    // Only the entry shown is saved when the page hides; the others were saved when left, and
+    // the one write must keep them, or back after a reload would open them at the top.
+    const frames = deferredFrames();
+    const position = spyOnAccessor(window, 'scrollY', 'get').mockReturnValue(640);
+    const before = createScrollCoordinator();
+    before.connect();
+    before.restore(new URL('http://localhost/list'), 'load', 'list');
+    before.capture('list');
+    before.restore(new URL('http://localhost/item'), 'push', 'item');
+    frames.flush();
+    position.mockReturnValue(90);
+    window.dispatchEvent(new Event('pagehide'));
+    before.dispose();
+
+    frames.scrollTo.mockClear();
+    const after = createScrollCoordinator();
+    after.connect();
+    after.restore(new URL('http://localhost/item'), 'load', 'item');
+    frames.flush();
+    expect(frames.scrollTo).toHaveBeenLastCalledWith(0, 90);
+    after.restore(new URL('http://localhost/list'), 'pop', 'list');
+    frames.flush();
+    expect(frames.scrollTo).toHaveBeenLastCalledWith(0, 640);
+    after.dispose();
+  });
+
+  it('bounds stored positions, keeping the most recently saved', () => {
     deferredFrames();
     spyOnAccessor(window, 'scrollY', 'get').mockReturnValue(10);
     const coordinator = createScrollCoordinator();
     for (let index = 0; index < 105; index++) coordinator.capture(`entry-${index}`);
-    const stored = Object.keys(sessionStorage).filter(key => key.startsWith('__mmd_scroll_'));
-    expect(stored).toHaveLength(100);
-    expect(sessionStorage.getItem('__mmd_scroll_entry-0')).toBeNull();
-    expect(sessionStorage.getItem('__mmd_scroll_entry-104')).not.toBeNull();
+    // Saved again, an old entry is the newest and outlives those saved after it the first time.
+    coordinator.capture('entry-3');
+    // Not connected, so disposing writes them, as for a runtime replaced in the same document.
     coordinator.dispose();
+    const keys = stored().map(([key]) => key);
+    expect(keys).toHaveLength(100);
+    expect(keys).not.toContain('entry-0');
+    expect(keys).not.toContain('entry-5');
+    expect(keys.at(-1)).toBe('entry-3');
 
+    // A reloaded document's offsets are newer than those it read back.
     const reloaded = createScrollCoordinator();
     reloaded.capture('entry-105');
-    expect(sessionStorage.getItem('__mmd_scroll_entry-5')).toBeNull();
-    expect(Object.keys(sessionStorage).filter(key => key.startsWith('__mmd_scroll_'))).toHaveLength(100);
     reloaded.dispose();
+    const after = stored().map(([key]) => key);
+    expect(after).toHaveLength(100);
+    expect(after).not.toContain('entry-6');
+    expect(after.at(-1)).toBe('entry-105');
   });
 
   it('keeps load and replace positions unchanged when there is no hash', () => {
@@ -214,7 +267,7 @@ describe('scroll restoration coordinator', () => {
     target.id = 'saved';
     document.body.append(target);
     const intoView = vi.spyOn(target, 'scrollIntoView');
-    sessionStorage.setItem('__mmd_scroll_saved', JSON.stringify({ x: 12, y: 820 }));
+    seed([['saved', 12, 820]]);
     const coordinator = createScrollCoordinator();
     coordinator.restore(new URL('http://localhost/docs#saved'), 'pop', 'saved');
     frames.flush();
@@ -258,7 +311,7 @@ describe('scroll restoration coordinator', () => {
     // The swipe that goes back sends horizontal wheel events, and some arrive after the entry
     // changes. They are not the person scrolling the page, so the saved offset still applies.
     const frames = deferredFrames();
-    sessionStorage.setItem('__mmd_scroll_swiped', JSON.stringify({ x: 0, y: 900 }));
+    seed([['swiped', 0, 900]]);
     const coordinator = createScrollCoordinator();
     coordinator.connect();
     let ready!: () => void;
@@ -295,7 +348,7 @@ describe('scroll restoration coordinator', () => {
 
   it('ignores invalid stored coordinates and falls back to the top', () => {
     const frames = deferredFrames();
-    sessionStorage.setItem('__mmd_scroll_invalid', '{"x":null,"y":"820"}');
+    sessionStorage.setItem('__mmd_scroll#positions', '[["invalid",null,"820"],"junk",["other",0]]');
     const coordinator = createScrollCoordinator();
     coordinator.restore(new URL('http://localhost/invalid'), 'pop', 'invalid');
     frames.flush();
@@ -321,21 +374,19 @@ describe('scroll restoration coordinator', () => {
     const frames = deferredFrames();
     const position = spyOnAccessor(window, 'scrollY', 'get').mockReturnValue(640);
     const history = createMemoryRouteHistory({ initialEntries: ['/first'] });
-    const firstKey = history.location.key;
     const runtime = createRouteRuntime({ routeHistory: history, environment: {} });
     runtime.connect();
     runtime.navigate('/second');
     frames.flush();
-    expect(JSON.parse(sessionStorage.getItem(`__mmd_scroll_${firstKey}`)!)).toEqual({ x: 0, y: 640 });
     position.mockReturnValue(210);
-    const secondKey = history.location.key;
     runtime.back();
     frames.flush();
     expect(frames.scrollTo).toHaveBeenLastCalledWith(0, 640);
-    expect(JSON.parse(sessionStorage.getItem(`__mmd_scroll_${secondKey}`)!)).toEqual({ x: 0, y: 210 });
     runtime.forward();
     frames.flush();
     expect(frames.scrollTo).toHaveBeenLastCalledWith(0, 210);
+    // Navigating keeps offsets in memory; storage is written when the page hides.
+    expect(sessionStorage.length).toBe(0);
     runtime.dispose();
     history.destroy();
   });
