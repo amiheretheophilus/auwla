@@ -118,17 +118,37 @@ const RELATIVE_ROUTE_ORIGIN = 'http://memoized-dom.relative';
 const RELATIVE_ROUTE_URL = new URL(RELATIVE_ROUTE_ORIGIN);
 
 /**
- * @internal Whether two URLs have the same origin. Chromium builds `URL.origin` anew on every
- * read, a security-origin object serialized to a string, which made it a tenth of a query-only
- * navigation. An http(s) origin serializes as `protocol//host`, so comparing those two gives the
- * same answer; any other scheme compares origins.
+ * Each URL's origin, read once. A URL getter crosses into the browser and builds a new string on
+ * every read: in Chromium, `origin` costs about half as much as parsing a short URL. The router reads
+ * the same URLs' origins several times a navigation, and never sets a protocol, host or port, the
+ * only parts an origin comes from.
+ */
+const origins = new WeakMap<URL, string>();
+
+function originOf(url: URL): string {
+  let origin = origins.get(url);
+  if (origin === undefined) {
+    origin = url.origin;
+    origins.set(url, origin);
+  }
+  return origin;
+}
+
+/**
+ * @internal Whether two URLs have the same origin. `second` is the one kept: the route's own URL,
+ * or a constant. `first` is usually new, so it is tested by its `href`, a string the URL keeps:
+ * an href that starts with a scheme-host-port origin and then `/` has that origin, as its
+ * authority ends at that `/` (no user info, the same host and port). Anything else, including an
+ * opaque origin (`null`), compares origins.
  */
 export function sameOrigin(first: URL, second: URL): boolean {
-  const protocol = first.protocol;
-  if (protocol === second.protocol && (protocol === 'http:' || protocol === 'https:')) {
-    return first.host === second.host;
+  if (first === second) return true;
+  const origin = originOf(second);
+  if (origin !== 'null') {
+    const href = first.href;
+    if (href.startsWith(origin) && href.charCodeAt(origin.length) === 47 /* '/' */) return true;
   }
-  return first.origin === second.origin;
+  return originOf(first) === origin;
 }
 
 /**
