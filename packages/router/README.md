@@ -86,6 +86,9 @@ navigate('/organizations/:orgId/projects/:projectId', {
 
 // Relative directory navigation:
 navigateRelative('../settings');
+// As a link does, a hash keeps the current query, and a query replaces it:
+navigateRelative('#comments');   // /posts/1?tab=top → /posts/1?tab=top#comments
+navigateRelative('?tab=new');    // /posts/1?tab=top#comments → /posts/1?tab=new
 
 // Browser traversal:
 back();

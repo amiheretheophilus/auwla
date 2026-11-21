@@ -32,7 +32,11 @@ export function enableRelativeNavigation(runtime: CoreRouteRuntime): CoreRouteRu
       );
       if (!pattern.startsWith('/')) destination = destination.slice(1);
     }
-    const href = resolveRoutePath(options.from ?? runtime.route.pathname, destination);
+    // From the current page, a hash (or nothing) keeps its query, as `<a href="#x">` does; a
+    // query replaces it. An explicit `from` is a path, with no query to keep.
+    const keepsQuery = destination === '' || destination.startsWith('#');
+    const base = options.from ?? (keepsQuery ? `${runtime.route.pathname}${runtime.route.search}` : runtime.route.pathname);
+    const href = resolveRoutePath(base, destination);
     return context.navigateToURL(context.applicationURL(href), options);
   }
   return Object.assign(runtime, { navigateRelative });

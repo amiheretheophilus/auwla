@@ -293,6 +293,28 @@ describe('route runtime', () => {
     runtime.dispose();
   });
 
+  it('keeps the query for a relative hash, as a link to #x does, and replaces it for a relative query', () => {
+    const runtime = createRouteRuntime({
+      environment: {},
+      routeHistory: createMemoryRouteHistory({ initialEntries: ['/posts/1?tab=top'] }),
+      routes: [{ id: 'post', pattern: '/posts/:id' }],
+    });
+    const at = () => `${runtime.route.pathname}${runtime.route.search}${runtime.route.hash}`;
+
+    runtime.navigateRelative('#comments');
+    expect(at()).toBe('/posts/1?tab=top#comments');
+    runtime.navigateRelative('', { hash: 'top' });
+    expect(at()).toBe('/posts/1?tab=top#top');
+    runtime.navigateRelative('');
+    expect(at()).toBe('/posts/1?tab=top');
+
+    runtime.navigateRelative('?tab=new');
+    expect(at()).toBe('/posts/1?tab=new');
+    runtime.navigateRelative('#end', { from: '/posts/2' });
+    expect(at()).toBe('/posts/2#end');
+    runtime.dispose();
+  });
+
   it('keeps the same matches and params through a query or hash change, and not a new param', () => {
     // What reads them sees the same objects, so no route region works out its identity again.
     const runtime = createRouteRuntime({
@@ -1391,6 +1413,20 @@ describe('route runtime', () => {
     expect(runtime.route.navigationType).toBe('replace');
     expect(runtime.route.state).toEqual({ returnTo: '/private' });
     expect(phases).toEqual(['start', 'redirect', 'complete']);
+    runtime.dispose();
+  });
+
+  it('resolves a relative redirect against the destination, keeping its query for a hash', () => {
+    const runtime = createRouteRuntime({ environment: {} });
+    runtime.blockNavigation(navigation => {
+      if (navigation.to.pathname === '/docs' && navigation.to.hash === '') return redirectRoute('#intro');
+      if (navigation.to.pathname === '/docs/old') return redirectRoute('../new');
+    });
+
+    runtime.navigate('/docs', { query: { v: '2' } });
+    expect(`${runtime.route.pathname}${runtime.route.search}${runtime.route.hash}`).toBe('/docs?v=2#intro');
+    runtime.navigate('/docs/old', { query: { v: '2' } });
+    expect(`${runtime.route.pathname}${runtime.route.search}`).toBe('/docs/new');
     runtime.dispose();
   });
 

@@ -48,8 +48,10 @@ export function enableNavigationBlockers(runtime: CoreRouteRuntime): CoreRouteRu
             if (decision.to instanceof URL) {
               next = new URL(decision.to.href);
             } else {
+              // Relative to the destination: a hash (or nothing) keeps its query, as a link does.
+              const keepsQuery = decision.to === '' || decision.to.startsWith('#');
               const redirectedPath = resolveRoutePath(
-                navigation.to.pathname,
+                keepsQuery ? `${navigation.to.pathname}${navigation.to.search}` : navigation.to.pathname,
                 decision.to,
               );
               next = context.applicationURL(redirectedPath);
