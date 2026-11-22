@@ -59,11 +59,6 @@ export interface RenderEnvironment {
    * document in client-create mode; server modes must inject one.
    */
   document: DocumentLike;
-  /**
-   * Driver for conservative volatile-pull frames. null disables pulling
-   * entirely (servers render synchronously; nothing keeps ticking).
-   */
-  schedule: ((fn: () => void) => void) | null;
   effects: Capability;
   refs: Capability;
   /**
@@ -82,22 +77,13 @@ function ambientDocument(): DocumentLike & Document {
   return document;
 }
 
-function ambientSchedule(): ((fn: () => void) => void) | null {
-  return typeof requestAnimationFrame === 'function'
-    ? requestAnimationFrame.bind(globalThis)
-    : null;
-}
-
-/** Browser default: ambient document, rAF pulls, everything runs. */
+/** Browser default: ambient document, everything runs. */
 export function clientEnvironment(): RenderEnvironment {
   return {
     mode: 'client-create',
     // Resolved lazily per access so tests stubbing globals keep working.
     get document() {
       return ambientDocument();
-    },
-    get schedule() {
-      return ambientSchedule();
     },
     effects: 'run',
     refs: 'run',
@@ -113,8 +99,6 @@ export function resolveEnvironment(
   return {
     mode: overrides.mode ?? base.mode,
     document: overrides.document ?? base.document,
-    schedule:
-      overrides.schedule === undefined ? base.schedule : overrides.schedule,
     effects: overrides.effects ?? base.effects,
     refs: overrides.refs ?? base.refs,
     creations: overrides.creations,

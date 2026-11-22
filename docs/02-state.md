@@ -188,29 +188,37 @@ export function Cart() {
 - Pure helper calls inside derivations are fine.
 - **Never write to a derived value** — `total++` is invalid; update `coupon`.
 
-## Opaque values
+## Values from code the compiler does not see
 
-Values whose changes the compiler cannot see use a browser-frame pull fallback.
-Their reads remain live. A volatile component can skip unrelated primitive local
-DOM slots and ordinary primitive derived calculations on a pull frame when the
-compiler proves that their values change only through successfully published
-writes. Object coercions, getters, unknown calls and unproven callbacks retain
-conservative refreshes. Values selected by reactive control flow retain pulls,
-including their downstream calculations and DOM slots. Normal writes still
-update their dependent calculations and slots, including when a write and a
-pull are batched together.
+A value an ordinary npm package made can change where the compiler cannot see it, inside the
+package's own closures. The compiler does not poll for such changes. It knows which of your
+names hold a package's value (`const store = createStore(…)`), and when your code calls into one
+of them, from a handler, a timer, a promise callback or a module function, the readers of that
+value read it again once the call returns. The page changes only where the value did:
+
+```tsx
+import { createStore } from 'zustand/vanilla';
+const store = createStore(() => ({ count: 0 }));
+
+export function Counter() {
+  return <button onClick={() => store.setState(s => ({ count: s.count + 1 }))}>
+    {store.getState().count}
+  </button>;
+}
+```
+
+A change the package makes on its own, with no call from your code (its own timer, a socket it
+opened), shows at your next call into it. So does a call made synchronously inside an effect's
+body: an effect re-reading the store would otherwise wake every other reader. The rules are in
+`wiki/compiler/handlers.md`, "State a package keeps".
 
 ## `if` and `switch` are reactive too
 
 Control flow that reads reactive state replays when that state changes —
 and the read doesn't have to be direct. A condition on a derived `const` or `let`,
 a prop, or an imported module value tracks the original source
-transitively. Pure value calculations that depend only on opaque inputs also
-replay on browser-frame pulls, even when JSX only reads the calculated result.
-Visible component and module helpers contribute their captured reads. Linked
-helpers carry captured opaque reads through imports and re-exports separately
-from their write effects, so read-only helpers retain the pull fallback without
-broadening ordinary write routing. Partial
+transitively. Visible component and module helpers contribute their captured
+reads, also through imports and re-exports. Partial
 calculations restore their initializer when no branch matches; imperative
 setup statements retain their one-time behavior.
 

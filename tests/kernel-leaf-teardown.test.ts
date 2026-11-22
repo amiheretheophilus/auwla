@@ -1,52 +1,37 @@
 import { afterEach, beforeEach, expect, it } from 'bun:test';
 import {
   createApplicationRuntime, getActiveApplicationRuntime, has, markDirty, onEntityDispose,
-  onRegistryChange, register, registeredIds, registryGeneration, setActiveApplicationRuntime,
+  register, registeredIds, setActiveApplicationRuntime,
   setScheduler, unregister, type ApplicationRuntime,
-  _internals,
 } from '../packages/runtime/src/kernel';
 import { cleanup } from '../packages/runtime/src/cleanup';
 
 let previous: ApplicationRuntime, runtime: ApplicationRuntime;
-let notification: ((id: string) => void) | undefined;
 let disposeHook: ((id: string) => readonly unknown[] | void) | undefined;
-onRegistryChange((id, kind) => { if (kind === 'remove') notification?.(id); });
 onEntityDispose(id => disposeHook?.(id));
 beforeEach(() => {
   previous = getActiveApplicationRuntime();
-  runtime = createApplicationRuntime('leaf-teardown-test', { schedule: null });
+  runtime = createApplicationRuntime('leaf-teardown-test');
   setActiveApplicationRuntime(runtime);
 });
 afterEach(() => {
-  notification = undefined; disposeHook = undefined;
+  disposeHook = undefined;
   runtime.dispose(); setActiveApplicationRuntime(previous);
 });
 
-it.each([false, true])('cleanup sees the current registry and generation (subtree=%s)', subtree => {
+it.each([false, true])('cleanup sees the current registry (subtree=%s)', subtree => {
   register({id:'Keep',parent:null,render(){}});
   register({id:'Owner',parent:null,render(){}});
   if (subtree) register({id:'Owner/Child',parent:'Owner',render(){}});
   const snapshot = registeredIds();
-  const generation = registryGeneration();
-  const observations: string[][] = [], generations: number[] = [];
+  const observations: string[][] = [];
   cleanup('Owner', () => {
-    observations.push([...registeredIds()]); generations.push(registryGeneration());
+    observations.push([...registeredIds()]);
     expect(has('Owner')).toBe(false); expect(has('Owner/Child')).toBe(false);
   });
   unregister('Owner');
-  expect(observations).toEqual([['Keep']]); expect(generations[0]).toBeGreaterThan(generation);
+  expect(observations).toEqual([['Keep']]);
   expect([...snapshot]).toEqual(subtree ? ['Keep','Owner','Owner/Child'] : ['Keep','Owner']);
-});
-
-it('registry notifications see each removal even when they repopulate the ID cache', () => {
-  register({id:'Owner',parent:null,render(){}});
-  register({id:'Owner/A',parent:'Owner',render(){}});
-  register({id:'Owner/B',parent:'Owner',render(){}});
-  registeredIds();
-  const snapshots: string[][] = [];
-  notification = () => snapshots.push([...registeredIds()]);
-  unregister('Owner');
-  expect(snapshots).toEqual([['Owner','Owner/B'], ['Owner'], []]);
 });
 
 it('keeps descendant-first disposal and LIFO cleanups without stopping on errors', () => {
@@ -64,16 +49,14 @@ it('keeps descendant-first disposal and LIFO cleanups without stopping on errors
   expect(registeredIds()).toEqual([]);
 });
 
-it('a leaf cleanup cancels pending and volatile state and allows a replacement owner', () => {
+it('a leaf cleanup cancels a pending update and allows a replacement owner', () => {
   const pending: Array<() => void> = [], renders: string[] = [];
   setScheduler(run => pending.push(run));
   register({id:'Parent',parent:null,render(){}});
-  register({id:'Parent/Leaf',parent:'Parent',volatile:true,render(){renders.push('old');}});
-  markDirty('Parent/Leaf', 'old');
+  register({id:'Parent/Leaf',parent:'Parent',render(){renders.push('old');}});
+  markDirty('Parent/Leaf');
   cleanup('Parent/Leaf', () => {
     expect(runtime.state.dirty.has('Parent/Leaf')).toBe(false);
-    expect(_internals().volatileSet.has('Parent/Leaf')).toBe(false);
-    expect(runtime.state.dirtyReasons.has('Parent/Leaf')).toBe(false);
     markDirty('Parent/Leaf');
     register({id:'Parent/Leaf',parent:'Parent',render(){renders.push('new');}});
     markDirty('Parent/Leaf');

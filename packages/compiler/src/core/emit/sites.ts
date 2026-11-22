@@ -300,7 +300,7 @@ export function emitSites(
       if (context.source !== undefined) {
         factories.push(emitBranch({ template: null, sites: [] }, value, plan, branchContext));
       }
-      mount.push(statement('const $$region = $$runtime.createCondRegion($$slot.parentNode, $$id + $$suffix, () => $$value.index, $$branches, void 0, void 0, void 0, $$slot);', {
+      mount.push(statement('const $$region = $$runtime.createCondRegion($$slot.parentNode, $$id + $$suffix, () => $$value.index, $$branches, $$slot);', {
         region,
         runtime,
         slot: node,

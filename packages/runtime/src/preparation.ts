@@ -247,12 +247,12 @@ export function createRenderPreparation(onRenderError?: (error: unknown) => void
       }
       entity.preparation = preparation;
       const render = entity.render;
-      entity.render = reasons => {
+      entity.render = () => {
         if (status === 'disposed') return;
         if (status === 'pending' && entity.phase === 'effect') return;
         // Updates are incremental. Compiler-owned read scopes must wrap only
         // the sinks actually replayed; do not clear untouched sink claims here.
-        try { preparation.run(() => render.call(entity, reasons)); }
+        try { preparation.run(() => render.call(entity)); }
         catch (error) {
           if (onRenderError === undefined || entity.phase === 'effect') throw error;
           onRenderError(error);

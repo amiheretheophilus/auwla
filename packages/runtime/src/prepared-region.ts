@@ -2,7 +2,6 @@
 import { getActiveApplicationRuntime, getActiveEnvironment, runWithApplicationRuntime } from './kernel';
 import { createRenderPreparation, type RenderPreparation } from './preparation';
 import type { CondEntry } from './cond';
-import type { DirtyReasons } from './dirty-reasons';
 import { HydrationMismatchError } from './hydration-error';
 import { noteRenderReadiness } from './render-readiness';
 import { toPresentationError } from './presentation-error';
@@ -42,8 +41,8 @@ export function createPreparedRegion(
       get status() { return disposed ? 'disposed' as const : 'active' as const; },
       get error(): unknown { return undefined; },
       restart() {},
-      update(reasons: DirtyReasons = null) {
-        if (!disposed) enclosing.run(() => entry.update(reasons));
+      update() {
+        if (!disposed) enclosing.run(() => entry.update());
       },
       dispose() {
         if (disposed) return;
@@ -247,9 +246,9 @@ export function createPreparedRegion(
     retry,
     /** New authored inputs replace a failed draft without retrying old requests. */
     restart,
-    update(reasons: DirtyReasons = null) {
+    update() {
       if (state !== 'pending' && state !== 'active') return;
-      try { preparation.run(() => content?.update(reasons)); check(); }
+      try { preparation.run(() => content?.update()); check(); }
       catch (cause) { fail(cause); }
     },
     dispose,

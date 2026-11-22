@@ -513,6 +513,13 @@ development machine: one that takes seconds to minutes, not milliseconds.
 A plain `bun test ./tests` shares one process, fails five files that pass alone and dies asking
 for 34 GB. Packages need `--isolate` for the same reason.
 
+**Browser tests from an agent's shell** (2026-11-22). Started from the agent's Git Bash tool,
+Edge exits at once with code 0 and Puppeteer reports "Failed to launch the browser process: Code:
+0", so every browser test fails there before it runs. The same command from PowerShell (or a
+normal terminal) launches it: `pages.app.test.ts` and `websocket.app.test.ts`, which failed that
+way, pass 11 of 11. Run browser tests from PowerShell, with `MMD_CHROME_PATH` and
+`PUPPETEER_EXECUTABLE_PATH` set to Edge.
+
 Reach for CI when one of these is due: at a phase exit, after a change to shared
 machinery (the reference oracle, the graph, the derived-value planner, the
 runtime), or before reporting a step as verified across the suite. Not after

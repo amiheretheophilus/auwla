@@ -123,7 +123,7 @@ try {
       for (const item of items) rows.push({ config: item.config, applicationCompilationMs: item.applicationCompilationMs, bundlingMs: item.bundlingMs,
         bundleBytes: item.bundleBytes, gzipBytes: item.gzipBytes, diagnostics: item.diagnostics,
         timings: Object.fromEntries(phases.map(phase => [phase, summary(item.samples[phase])])) as Record<Phase, ReturnType<typeof summary>> });
-      console.log(`${scenario.padEnd(7)} n=${String(size).padEnd(4)} volatile ${opaque.diagnostics.volatileEntities} → ${native.diagnostics.volatileEntities}; correctness passed`);
+      console.log(`${scenario.padEnd(7)} n=${String(size).padEnd(4)} entities ${opaque.diagnostics.entities} → ${native.diagnostics.entities}; correctness passed`);
     } finally { for (const item of items) await item.page.close(); }
   }
   if (browserErrors.length) throw new Error(browserErrors.join('\n'));

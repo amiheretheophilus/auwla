@@ -10,7 +10,7 @@ import {
 describe('detached render preparation lifecycle', () => {
   let runtime: ApplicationRuntime;
   beforeEach(() => {
-    runtime = createApplicationRuntime('preparation-test', { document, schedule: null });
+    runtime = createApplicationRuntime('preparation-test', { document });
     runWithApplicationRuntime(runtime, () => setScheduler(run => run()));
   });
   afterEach(() => {
@@ -235,7 +235,7 @@ describe('detached render preparation lifecycle', () => {
   });
 
   it('keeps concurrent runtimes and identical entity IDs isolated', () => {
-    const other = createApplicationRuntime('other', { document, schedule: null });
+    const other = createApplicationRuntime('other', { document });
     try {
       const left = inRuntime(() => createRenderPreparation());
       const right = runWithApplicationRuntime(other, () => createRenderPreparation());

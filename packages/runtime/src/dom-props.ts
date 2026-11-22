@@ -3,17 +3,13 @@
  *
  * Elements containing a spread are patched as one ordered object so later
  * explicit or spread values override earlier ones exactly as authored.
- * Unknown spread event handlers receive a root fallback on normal completion;
- * explicit compiler-instrumented handlers can be marked safe by key.
  */
 
-import { markDirtySubtree } from './kernel';
 import { classValue, setClassValue, setStyleValue } from './dom-values';
 import { isAriaAttribute, isHtmlBooleanAttribute } from './html-attributes';
 
 interface EventRecord {
   source: EventListener;
-  listener: EventListener;
   type: string;
 }
 
@@ -80,27 +76,21 @@ const EVENT_NAMES: Record<string, string> = {
 };
 
 /** Patch all properties represented by one ordered spread object. */
-export function patchDomProps(
-  element: Element,
-  nextValue: unknown,
-  eventRootId: string,
-  safeEventKeys: readonly string[] = [],
-): void {
+export function patchDomProps(element: Element, nextValue: unknown): void {
   const next =
     nextValue !== null && typeof nextValue === 'object'
       ? (nextValue as Record<string, unknown>)
       : {};
   const previous = propSnapshots.get(element) ?? new Map<string, unknown>();
-  const safeEvents = new Set(safeEventKeys);
 
   for (const name of previous.keys()) {
     if (!Object.prototype.hasOwnProperty.call(next, name)) {
-      applyDomProp(element, name, null, previous, eventRootId, safeEvents);
+      applyDomProp(element, name, null, previous);
     }
   }
   forgetRepeatedAttributes(next, previous);
   for (const [name, value] of Object.entries(next)) {
-    applyDomProp(element, name, value, previous, eventRootId, safeEvents);
+    applyDomProp(element, name, value, previous);
   }
 
   const snapshot = new Map<string, unknown>();
@@ -134,22 +124,14 @@ function applyDomProp(
   name: string,
   value: unknown,
   previous: Map<string, unknown>,
-  eventRootId: string,
-  safeEvents: Set<string>,
 ): void {
   if (name === 'key' || name === 'children' || name === 'ref') return;
   // A named slot's content (`slot:header`, the compiler's `features/slots/`), like `children`, is
   // never an attribute, even when a slot component spreads its props onto an element. Nor is the
-  // route context the compiler's passes a component rendered in several (`features/routes/`).
+  // route context the compiler passes a component rendered in several (`features/routes/`).
   if (name.startsWith('slot:') || name === 'route:context') return;
   if (/^on[A-Z]/.test(name)) {
-    setEvent(
-      element,
-      name,
-      typeof value === 'function' ? (value as EventListener) : null,
-      eventRootId,
-      safeEvents.has(name),
-    );
+    setEvent(element, name, typeof value === 'function' ? (value as EventListener) : null);
     return;
   }
   const normalized = snapshotValue(name, value);
@@ -172,13 +154,8 @@ function snapshotValue(name: string, value: unknown): unknown {
   return String(value);
 }
 
-function setEvent(
-  element: Element,
-  key: string,
-  source: EventListener | null,
-  rootId: string,
-  safe: boolean,
-): void {
+/** The caller (`components.ts`) has already wrapped the handler to commit its writes. */
+function setEvent(element: Element, key: string, source: EventListener | null): void {
   let records = eventSnapshots.get(element);
   if (records === undefined) {
     records = new Map();
@@ -187,31 +164,14 @@ function setEvent(
   const existing = records.get(key);
   if (existing?.source === source) return;
   if (existing !== undefined) {
-    element.removeEventListener(existing.type, existing.listener);
+    element.removeEventListener(existing.type, existing.source);
     records.delete(key);
   }
   if (source === null) return;
 
   const type = eventType(key);
-  const listener = safe
-    ? source
-    : function spreadEvent(this: Element, event: Event): unknown {
-        const result = source.call(this, event);
-        markDirtySubtree(rootId);
-        if (
-          result !== null &&
-          typeof result === 'object' &&
-          'then' in result &&
-          typeof (result as PromiseLike<unknown>).then === 'function'
-        ) {
-          (result as PromiseLike<unknown>).then(() => {
-            markDirtySubtree(rootId);
-          });
-        }
-        return result;
-      };
-  element.addEventListener(type, listener);
-  records.set(key, { source, listener, type });
+  element.addEventListener(type, source);
+  records.set(key, { source, type });
 }
 
 function eventType(key: string): string {

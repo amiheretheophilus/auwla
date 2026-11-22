@@ -7,7 +7,6 @@ export type Mode = 'opaque' | 'native';
 export interface CaseConfig { scenario: Scenario; size: number; mode: Mode }
 export interface Diagnostics {
   entities: number;
-  volatileEntities: number;
   idleFrameCallbacks: number;
   idleRenders: number;
   idleTextWrites: number;

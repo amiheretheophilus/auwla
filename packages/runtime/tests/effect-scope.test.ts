@@ -1,4 +1,5 @@
 /** Lifecycle races and ownership cannot be established by HTML comparison alone. */
+import '../../../test-support/dom';
 import { expect, it } from 'bun:test';
 import { createBuildScope } from '../src/build-scope';
 import { publishVersions, trackRead } from '../src/computation';

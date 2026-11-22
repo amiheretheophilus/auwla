@@ -16,7 +16,7 @@ it.each(['before', 'after'] as const)('opens a live subscription when an SSR str
   await server.settle();
   const state = server.serializeState();
   const window = new Window();
-  const app = createApplicationRuntime('late-live-'+timing, {mode:'hydrate',schedule:null,
+  const app = createApplicationRuntime('late-live-'+timing, {mode:'hydrate',
     document:window.document as unknown as Document});
   const runtime = enableDataRestoration(createCoreDataRuntime());
   let requests = 0;
@@ -74,7 +74,7 @@ it('upgrades an existing client cache without replacing its resource or request 
 
 it.each(['resume','cancel','dispose'] as const)('owns deferred hydration work until %s', async action => {
   const window = new Window();
-  const app = createApplicationRuntime('request-handoff-'+action, {mode:'hydrate',schedule:null,
+  const app = createApplicationRuntime('request-handoff-'+action, {mode:'hydrate',
     document:window.document as unknown as Document});
   const fetcher = vi.fn(async () => Response.json('ready'));
   const runtime = enableDataRestoration(createCoreDataRuntime({fetch:fetcher}));
@@ -115,7 +115,7 @@ it.each(['pending','error','revalidate'] as const)('preserves restored %s throug
     ? {status:'error' as const,error:{kind:'network' as const,status:null,statusText:null,message:'Restored failure'}}
     : {status:'success' as const,data:'server',revalidate:true}}]};
   const window = new Window();
-  const app = createApplicationRuntime('restored-'+status, {mode:'hydrate',schedule:null,
+  const app = createApplicationRuntime('restored-'+status, {mode:'hydrate',
     document:window.document as unknown as Document});
   const fetcher = vi.fn(async () => Response.json('client'));
   const runtime = enableDataRestoration(createCoreDataRuntime({fetch:fetcher}));

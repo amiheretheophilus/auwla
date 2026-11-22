@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 function isolated(id: string) {
-  const runtime = createApplicationRuntime(id, { document, schedule: null });
+  const runtime = createApplicationRuntime(id, { document });
   runtimes.push(runtime);
   return runtime;
 }

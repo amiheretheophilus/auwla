@@ -216,7 +216,7 @@ export const sizeFixtures: Record<string, Record<string, string>> = {
       <button onClick={()=>count++}>Add</button><p>{count}</p></main>;}`,
     './host.ts': `import {createApplicationRuntime,setActiveApplicationRuntime} from '@memoized-dom/runtime';
       setActiveApplicationRuntime(createApplicationRuntime('size-fixture',{
-        document,schedule:null,effects:'run',refs:'run',
+        document,effects:'run',refs:'run',
       }));`,
   },
   'input-list': { './App.tsx': `export function App(){let count=0;let items=['helo','heoo3'];let temp='';

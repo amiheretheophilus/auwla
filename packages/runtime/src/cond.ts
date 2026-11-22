@@ -1,43 +1,35 @@
 /**
- * cond.ts — R8 conditional regions: anchored branch swapping.
+ * cond.ts — conditional regions: anchored branch swapping.
  *
- * The mirror of list.ts for conditionals. A conditional region owns the DOM
- * between its insertion point and an anchor comment; the compiler emits one
- * per `{cond ? <A/> : <B/>}` site and registers it as an entity, so the
- * access table routes the region's variables to it — a condition write
- * dirties the region, never the whole owner.
+ * A conditional region owns the DOM between an opening comment and a closing
+ * anchor. The compiler emits one per site whose value picks among branches
+ * (`core/emit/sites.ts`) and calls `update()` when the value changes.
  *
- * Branch semantics (spec §R8):
- *   - update() re-evaluates pick(). Same branch → the branch's own guarded
- *     update closure runs. Different branch → compiler-owned components and
- *     list regions drain, the old nodes are removed, and the new branch
- *     factory runs before the anchor.
+ * Branch semantics:
+ *   - update() re-evaluates pick(). Same branch → the branch's own update
+ *     closure runs. Different branch → the old branch is disposed, its nodes
+ *     are removed, and the new branch factory runs before the anchor.
  *   - A swap destroys branch-local DOM state (focus, scroll); module state
  *     survives, so re-mounting a branch reflects current state.
  */
 
 import { getActiveEnvironment, type EntityId } from './kernel';
-import type { DirtyReasons } from './dirty-reasons';
 import { buildInScope, reserveCreationScope } from './adoption';
 
 export interface CondEntry {
   /** Root nodes of the mounted branch (elements or fragment children). */
   nodes: Node[];
-  /** The branch's guarded update closure. */
-  update: (reasons?: DirtyReasons) => void;
-  /** Replay local bindings without advancing committed source captures. */
-  retain?: (reasons?: DirtyReasons) => void;
-  /** A stable holder may have rebound in place and lost its old payload. */
-  canRetain?: () => boolean;
+  /** The branch's update closure. */
+  update: () => void;
   /** Drain structural regions retained by this branch before replacement. */
   dispose?: () => void;
 }
 
-export type CondBranchFactory = (adoptingInitial?: boolean) => CondEntry;
+export type CondBranchFactory = () => CondEntry;
 
 export interface CondRegion {
-  /** Re-pick and re-render: same branch → guarded update; swap → rebuild. */
-  update(reasons?: DirtyReasons): void;
+  /** Re-pick and re-render: same branch → its update; swap → rebuild. */
+  update(): void;
   /** Currently mounted branch index. */
   index(): number;
   /** Drain the mounted branch and remove the stable anchor. */
@@ -49,32 +41,19 @@ export function createCondRegion(
   id: EntityId,
   pick: () => number,
   branches: readonly (CondBranchFactory | null)[],
-  identity?: () => unknown,
-  initial?: { readonly open: Node; readonly end: Node; readonly index?: number },
-  retain?: { readonly content: number; readonly pending: readonly number[] },
   before?: Node,
 ): CondRegion {
-  // Hydration protocol (hydration-markers.md §2/§3): an opening `mmd:g`
-  // marker before the branch content and a uniform `/mmd` close after it.
-  // The trailing close anchor keeps its role as the stable insertion point
-  // for branch swaps; empty regions emit an adjacent valid pair.
+  // An opening `mmd:g` comment before the branch content and a `/mmd` close
+  // after it. The close anchor is the stable insertion point for swaps.
   const environment = getActiveEnvironment();
-  const openAnchor = initial?.open ?? environment.document.createComment(`mmd:g:${id}`);
-  const anchor = initial?.end ?? environment.document.createComment('/mmd');
-  if (initial !== undefined) {
-    if (openAnchor.parentNode !== parent || anchor.parentNode !== parent) {
-      throw new Error('memo-dom: initial conditional anchors do not belong to their parent');
-    }
-  } else {
-    parent.insertBefore(openAnchor, before ?? null);
-    parent.insertBefore(anchor, before ?? null);
-  }
-  let bindingInitial = initial !== undefined;
+  const openAnchor = environment.document.createComment(`mmd:g:${id}`);
+  const anchor = environment.document.createComment('/mmd');
+  parent.insertBefore(openAnchor, before ?? null);
+  parent.insertBefore(anchor, before ?? null);
   // Each branch is numbered under this region, whenever it is built (`adoption.ts`).
   const scope = reserveCreationScope();
 
   let current = -1;
-  let currentIdentity: unknown;
   let entry: CondEntry | null = null;
   let disposed = false;
 
@@ -97,23 +76,12 @@ export function createCondRegion(
     }
   }
 
-  function update(reasons: DirtyReasons = null): void {
+  function update(): void {
     if (disposed) return;
     const idx = pick();
     if (disposed) return;
-    // Automatic source presentation keeps committed content during replacement,
-    // but never suppresses initial pending UI, errors or authored control flow.
-    if (entry !== null && current === retain?.content && retain.pending.includes(idx) && entry.canRetain?.()) {
-      entry.retain?.(reasons);
-      return;
-    }
-    if (bindingInitial && initial!.index !== undefined && idx !== initial!.index) {
-      throw new Error('memo-dom: initial conditional selection does not match its HTML');
-    }
-    const nextIdentity = identity?.();
-    if (disposed) return;
-    if (idx === current && Object.is(nextIdentity, currentIdentity)) {
-      entry?.update(reasons);
+    if (idx === current) {
+      entry?.update();
       return;
     }
     if (entry !== null) {
@@ -128,7 +96,7 @@ export function createCondRegion(
     }
     const factory = branches[idx] ?? null;
     if (factory !== null) {
-      entry = buildInScope(scope, `b${idx}`, () => factory(bindingInitial ? true : undefined));
+      entry = buildInScope(scope, `b${idx}`, () => factory());
     }
     if (disposed) {
       const returned = entry;
@@ -143,18 +111,15 @@ export function createCondRegion(
       }
       return;
     }
-    if (entry !== null && !bindingInitial) {
+    if (entry !== null) {
       // Every insertion is before the stable trailing anchor, so walking the
-      // authored root-node order preserves that order. Reverse iteration
-      // inverted multi-node fragments and list branches.
+      // authored root-node order preserves that order.
       for (let i = 0; i < entry.nodes.length; i++) {
         anchor.parentNode!.insertBefore(entry.nodes[i]!, anchor);
         if (disposed) return;
       }
     }
     current = idx;
-    bindingInitial = false;
-    currentIdentity = nextIdentity;
   }
 
   function dispose(): void {

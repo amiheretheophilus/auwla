@@ -9,7 +9,7 @@ describe('atomic range failure ownership', () => {
   let runtime: ApplicationRuntime;
   const inRuntime = <T>(run: () => T): T => runWithApplicationRuntime(runtime, run);
   beforeEach(() => {
-    runtime = createApplicationRuntime('atomic-errors', { document, schedule: null });
+    runtime = createApplicationRuntime('atomic-errors', { document });
     inRuntime(() => setScheduler(run => run()));
   });
   afterEach(() => { runtime.dispose(); document.body.replaceChildren(); });

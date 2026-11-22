@@ -8,7 +8,8 @@
  *
  * The operations only the old compiler's output called (its access table,
  * event commits, state cells, setters, list keys, page binders and effect
- * registration) went with it on 2026-11-18.
+ * registration) went with it on 2026-11-18, and its update model (dirty
+ * reasons, volatile per-frame pulls, entity re-renders on demand) on 2026-11-22.
  */
 
 export {
@@ -22,13 +23,10 @@ export {
   invalidateEntity,
   undirty,
   markDirtySubtree,
-  markOwnerRootDirty,
   commit,
   setScheduler,
   resetScheduler,
   getEntity,
-  renderEntity,
-  renderDescendants,
   createApplicationRuntime,
   getActiveApplicationRuntime,
   getExtensionStore,
@@ -38,12 +36,7 @@ export {
   runWithRenderEnvironment,
 } from './kernel';
 export { createStorage, type StorageShim } from './async-storage';
-export type {
-  ApplicationRuntime,
-  DirtyReasonInput,
-  DirtyReasons,
-  Entity,
-} from './kernel';
+export type { ApplicationRuntime, Entity } from './kernel';
 export type {
   Capability,
   DocumentLike,

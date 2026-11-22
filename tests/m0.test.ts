@@ -1,4 +1,4 @@
-import { stubGlobal, unstubAllGlobals } from '../test-support/helpers';
+import { unstubAllGlobals } from '../test-support/helpers';
 import { afterEach, describe, it, expect, beforeEach } from 'bun:test';
 import {
   setScheduler,
@@ -70,40 +70,6 @@ describe('M0 kernel', () => {
     resetScheduler();
   });
 
-  it('polls volatile pull state for its mounted lifetime only', () => {
-    const frames: FrameRequestCallback[] = [];
-    stubGlobal(
-      'requestAnimationFrame',
-      (callback: FrameRequestCallback) => {
-        frames.push(callback);
-        return frames.length;
-      },
-    );
-    setScheduler((fn) => fn());
-
-    const renders: unknown[] = [];
-    register({
-      id: 'Volatile',
-      parent: null,
-      volatile: true,
-      render: (reasons) => {
-        renders.push(reasons);
-      },
-    });
-
-    expect(_internals().volatileSet.has('Volatile')).toBe(true);
-    expect(frames).toHaveLength(1);
-    frames.shift()!(0);
-    expect(renders).toEqual([-1]);
-    expect(frames).toHaveLength(1);
-
-    unregister('Volatile');
-    frames.shift()!(16);
-    expect(renders).toEqual([-1]);
-    expect(frames).toHaveLength(0);
-    expect(_internals().volatileSet.size).toBe(0);
-  });
-
   it('batches the browser default in a microtask before paint', async () => {
     resetScheduler();
     let renders = 0;
@@ -122,38 +88,6 @@ describe('M0 kernel', () => {
     await Promise.resolve();
     expect(renders).toBe(1);
     unregister('Microtask');
-  });
-
-  it('unions exact dirty reasons and lets a full mark override them', () => {
-    let pump: (() => void) | null = null;
-    setScheduler((fn) => {
-      pump = fn;
-    });
-    const renders: unknown[] = [];
-    register({
-      id: 'Reasoned',
-      parent: null,
-      render: (reasons) => {
-        renders.push(reasons);
-      },
-    });
-
-    markDirty('Reasoned', 1);
-    markDirty('Reasoned', 2);
-    markDirty('Reasoned', 1);
-    pump!();
-    expect(renders).toHaveLength(1);
-    expect(renders[0]).toBeInstanceOf(Set);
-    expect([...(renders[0] as ReadonlySet<number>)]).toEqual([1, 2]);
-
-    markDirty('Reasoned', 1);
-    markDirty('Reasoned');
-    markDirty('Reasoned', 2);
-    pump!();
-    expect(renders[1]).toBeNull();
-
-    unregister('Reasoned');
-    resetScheduler();
   });
 
   it('dead letters: marking an unmounted entity is a silent no-op', () => {

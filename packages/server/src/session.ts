@@ -108,7 +108,6 @@ export class RenderSession {
     this.applicationRuntime = createApplicationRuntime(`ssr-${++sessionSequence}`, {
       mode: tier.mode,
       document: creations === undefined ? tier.document : numberedDocument(tier.document, creations),
-      schedule: null,
       effects: 'disabled',
       refs: 'disabled',
       ...(creations === undefined ? {} : { creations }),

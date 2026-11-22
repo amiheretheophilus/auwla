@@ -4,9 +4,8 @@
  * Behavior must be selected by explicit capabilities on the application
  * runtime, not `typeof window` probes. These tests prove:
  * - the browser default resolves to client-create with ambient globals;
- * - a server-shaped runtime (injected document, null schedule, effects
- *   disabled) renders structural anchors through the injected document,
- *   never schedules pull frames, and never executes effects;
+ * - a server-shaped runtime (injected document, effects disabled) renders
+ *   structural anchors through the injected document and never executes effects;
  * - schedulers and environments are independent per runtime.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'bun:test';
@@ -15,7 +14,6 @@ import {
   createApplicationRuntime,
   getActiveApplicationRuntime,
   getActiveEnvironment,
-  register,
   registerEffect,
   resetScheduler,
   runWithApplicationRuntime,
@@ -90,7 +88,6 @@ describe('render environment capabilities', () => {
     const server = createApplicationRuntime('request-dom', {
       mode: 'server-dom',
       document: doc,
-      schedule: null,
       effects: 'disabled',
       refs: 'disabled',
     });
@@ -111,7 +108,6 @@ describe('render environment capabilities', () => {
     const server = createApplicationRuntime('request-fx', {
       mode: 'server-dom',
       document: doc,
-      schedule: null,
       effects: 'disabled',
       refs: 'disabled',
     });
@@ -137,36 +133,10 @@ describe('render environment capabilities', () => {
     server.dispose();
   });
 
-  it('volatile pulls are disabled when the runtime has no frame scheduler', () => {
-    const raf = vi.spyOn(globalThis, 'requestAnimationFrame');
-    const { doc } = makeStubDocument();
-    const server = createApplicationRuntime('request-pull', {
-      mode: 'server-dom',
-      document: doc,
-      schedule: null,
-      effects: 'disabled',
-      refs: 'disabled',
-    });
-
-    runWithApplicationRuntime(server, () => {
-      register({
-        id: 'Pull/Panel',
-        parent: null,
-        render: () => {},
-        volatile: true,
-      });
-    });
-
-    expect(raf).not.toHaveBeenCalled();
-    raf.mockRestore();
-    server.dispose();
-  });
-
   it('environments are independent per runtime', () => {    const { doc } = makeStubDocument();
     const server = createApplicationRuntime('request-env', {
       mode: 'server-dom',
       document: doc,
-      schedule: null,
       effects: 'disabled',
       refs: 'disabled',
     });
@@ -174,7 +144,6 @@ describe('render environment capabilities', () => {
     expect(getActiveEnvironment().mode).toBe('client-create');
     runWithApplicationRuntime(server, () => {
       expect(getActiveEnvironment().mode).toBe('server-dom');
-      expect(getActiveEnvironment().schedule).toBeNull();
     });
     expect(getActiveEnvironment().mode).toBe('client-create');
 

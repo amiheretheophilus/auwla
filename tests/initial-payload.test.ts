@@ -7,7 +7,7 @@ import { cleanup } from '../packages/runtime/src/cleanup';
 afterEach(() => document.body.replaceChildren());
 
 it('restores before initial bindings and completes after the shared mount owns the retained root',()=>{
-  const runtime=createApplicationRuntime('payload-success',{document,schedule:null});
+  const runtime=createApplicationRuntime('payload-success',{document});
   try { runWithApplicationRuntime(runtime,()=>{
     document.body.innerHTML='<div id="root"><main>Kept</main></div><script type="application/mmd+json" data-mmd-root="App">{"version":1,"state":"server"}</script>';
     const main=document.querySelector('main')!;
@@ -31,7 +31,7 @@ it('restores before initial bindings and completes after the shared mount owns t
 });
 
 it.each([false,true])('unregisters failed initializers and finishes the data handoff (recoverable=%s)',recoverable=>{
-  const runtime=createApplicationRuntime('payload-failure',{document,schedule:null});
+  const runtime=createApplicationRuntime('payload-failure',{document});
   try { runWithApplicationRuntime(runtime,()=>{
     document.body.innerHTML='<div id="root"></div><script type="application/mmd+json" data-mmd-root="App">{"version":1}</script>';
     const bridge=getExtensionStore<Record<string,unknown>>('mmd:data-runtime-active',()=>({}));

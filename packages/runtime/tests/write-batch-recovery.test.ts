@@ -3,8 +3,6 @@ import { afterEach, expect, it, spyOn } from 'bun:test';
 import {
   createApplicationRuntime,
   registerEntity,
-  renderDescendants,
-  renderEntity,
   runWithApplicationRuntime,
   setScheduler,
   type ApplicationRuntime,
@@ -138,25 +136,6 @@ it('keeps a new write made after a child has already rendered', () => {
   expect(seen).toEqual([0, 1]);
 });
 
-it.each(['entity', 'descendants'])('acknowledges writes consumed by an explicit %s render', (mode) => {
-  const runtime = application();
-  let renders = 0;
-  row(runtime, 'parent', () => {});
-  const child = row(runtime, 'parent/child', () => renders++, 'parent');
-  holdRecovery();
-  child.mark();
-  runWithApplicationRuntime(runtime, () => {
-    if (mode === 'entity') {
-      renderEntity('parent/child');
-    } else {
-      renderDescendants('parent');
-    }
-  });
-  while (queued.length > 0) {
-    queued.shift()!();
-  }
-  expect(renders).toBe(1);
-});
 
 it('continues recovering other rows after one queued render throws', () => {
   const runtime = application();

@@ -19,7 +19,7 @@ export function installBenchmark(App: (id: string, parent: null) => Node, config
   const prepare = async () => {
     close(); requests = 0;
     if (document.hidden) throw new Error('Benchmark tab is hidden; opaque pulling would be incorrectly skipped');
-    owner = createApplicationRuntime('ThirdPartyBench', { document, schedule: run => frames.push(run) });
+    owner = createApplicationRuntime('ThirdPartyBench', { document });
     // One active browser app owns the whole trial, including async data delivery.
     // A short synchronous request scope would restore the wrong app before fetch settles.
     previousOwner = setActiveApplicationRuntime(owner);
@@ -43,7 +43,8 @@ export function installBenchmark(App: (id: string, parent: null) => Node, config
     if (requests !== (config.scenario === 'fetch' ? config.size : 0)) throw new Error(`Unexpected initial request count ${requests}`);
   };
   const frame = () => {
-    // Snapshot before running: the volatile driver schedules the NEXT frame.
+    // Nothing schedules frames since the old compiler's per-frame pulls went (2026-11-22);
+    // an idle frame must stay free.
     const batch = frames; frames = [];
     if (countFrames) frameCallbacks += batch.length;
     for (const callback of batch) callback();
@@ -70,13 +71,12 @@ export function installBenchmark(App: (id: string, parent: null) => Node, config
       await prepare();
       const result: Diagnostics = {
         entities: owner!.state.registry.size,
-        volatileEntities: [...owner!.state.registry.values()].filter(entity => entity.volatile === true).length,
         idleFrameCallbacks: 0, idleRenders: 0, idleTextWrites: 0, updateRenders: 0, updateTextWrites: 0, requests: 0,
       };
       let renders = 0, writes = 0;
       // Counters are installed ONLY for this untimed correctness/diagnostic run.
       for (const entity of owner!.state.registry.values()) {
-        const render = entity.render; entity.render = reasons => { renders++; render(reasons); };
+        const render = entity.render; entity.render = () => { renders++; render(); };
       }
       const descriptor = Object.getOwnPropertyDescriptor(CharacterData.prototype, 'data')!;
       if (!descriptor.set) throw new Error('Cannot instrument CharacterData.data');

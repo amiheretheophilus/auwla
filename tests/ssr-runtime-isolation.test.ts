@@ -1,8 +1,8 @@
 /**
  * SSR Slice 1.1 — application runtime isolation.
  *
- * The kernel's mutable state (registry, dirty set, volatile set, scheduler,
- * invalidation reasons, commit diagnostics) lives inside an
+ * The kernel's mutable state (registry, dirty set, scheduler, commit
+ * diagnostics) lives inside an
  * ApplicationRuntime. Browsers use one ambient default; server entry points
  * create, activate, and dispose one per request. These tests prove two
  * runtimes cannot observe each other's state.

@@ -124,7 +124,7 @@ const neverAnswers = (() => new Promise(() => {})) as unknown as typeof fetch;
  * sources and `defer` belong to a data runtime no step reaches.
  */
 export async function importAsServer<T>(load: () => Promise<T>): Promise<T> {
-  const application = createApplicationRuntime('delivered-server', { effects: 'disabled', refs: 'disabled', schedule: null });
+  const application = createApplicationRuntime('delivered-server', { effects: 'disabled', refs: 'disabled' });
   const data = createDataRuntime({ fetch: neverAnswers });
   // A module's top level runs when the import settles, outside any synchronous scope, so the
   // active runtimes are swapped around it. Cases run one at a time.

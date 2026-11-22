@@ -71,20 +71,14 @@ before the whole root is replaced.
 
 ## Failed renders
 
-A failed ordinary render retains a full dirty mark for the next commit. This
-prevents a subsequent pull or partial write from skipping slots that the failed
-render never reached. Independent render entities and their cascades finish
+A failed ordinary render stays dirty for the next commit, so the slots it never
+reached are updated then. Independent render entities and their cascades finish
 before the error is reported. The failed entity and its descendants wait for a
 later commit; effects wait for coherent render completion. One render error is
 re-thrown unchanged, multiple independent errors are aggregated. The runtime
 does not schedule an immediate retry or roll back completed writes. Failed
 effects keep their existing behavior; unregistered or replaced entities are not
 revived. A stale batch entry cannot render a replacement with the same ID.
-
-A synchronous render error during an opaque pull still schedules the next
-browser frame. The original error propagates, and recovery uses the retained
-full dirty mark. Removing the last volatile owner or disposing its application
-during the failed render prevents rearming; no immediate retry is added.
 
 ## Entity teardown
 
@@ -94,10 +88,15 @@ a direct removal path. Traversal buffers are retained for nested owners; error
 arrays are created only when a cleanup reports a failure. Owner cleanups still
 run in reverse registration order, and reported failures do not stop later hooks.
 
-Registry generation advances before removal notifications and cleanup hooks.
-Each removal invalidates the cached ID list before notifying listeners, so calls
+Each removal invalidates the cached ID list before cleanup hooks run, so calls
 to `registeredIds()` during teardown reflect the current registry. Previously
 returned ID snapshots keep their contents.
+
+The old compiler's update model is gone (2026-11-22): dirty reasons merged per
+entity, volatile entities re-read once per browser frame (and the environment's
+frame `schedule` that drove them), `renderEntity`/`renderDescendants`, and the
+root re-render after a spread event handler. An entity's `render()` takes no
+arguments; `markDirty(id)` and `invalidateEntity(id)` are the same call.
 
 ## Conditionals
 

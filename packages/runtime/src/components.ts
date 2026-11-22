@@ -409,15 +409,13 @@ function hostProgram(tag: string): RenderProgram {
       };
       const apply = (value: unknown) => {
         const { children, ...attributes } = asProps(value);
-        const events: string[] = [];
         for (const [name, handler] of Object.entries(attributes)) {
           if (!/^on[A-Z]/.test(name) || typeof handler !== 'function') {
             continue;
           }
           attributes[name] = listener(handler);
-          events.push(name);
         }
-        patchDomProps(element, attributes, owner.id, events);
+        patchDomProps(element, attributes);
         content.write(children);
       };
       apply(values[0]);

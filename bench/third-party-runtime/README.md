@@ -73,11 +73,10 @@ Three independent phases:
   synchronous commits, without pumping a frame between clicks.
 - `updates-frame`: dispatch one click followed by one simulated frame per unit.
 
-The frame driver snapshots pending callbacks before executing them, so a callback
-which schedules the next frame cannot loop forever in the same frame. Native
-cases with no volatile work still pay the common empty-driver overhead. Tabs are
-brought to the foreground; hidden tabs, where opaque pulling is skipped, are
-rejected. Cross-origin isolation enables higher-resolution timers where supported.
+The old compiler re-read opaque state once per visible frame; the runtime's
+per-frame driver went with it (2026-11-22), so no mode schedules frames now and
+an idle frame must cost nothing. Tabs are brought to the foreground; hidden tabs
+are rejected. Cross-origin isolation enables higher-resolution timers where supported.
 
 The frame count is deterministic. This is **not** a measurement of operating
 system idle CPU%, battery usage, real RAF cadence, FPS, paint, layout or input
@@ -94,7 +93,7 @@ machine load can still affect results; raw samples are retained rather than hidd
 Every timing trial fails on stale/wrong values, replaced output nodes, lost input
 drafts or an unexpected refetch. Before timing, a separate diagnostic run records:
 
-- registered and volatile entity counts;
+- the registered entity count;
 - callbacks and entity renders across **5 simulated idle frames**;
 - renders and guarded text writes across **one increment per instance**, with a
   frame after each increment;
@@ -105,10 +104,7 @@ guarded text write. The diagnostic render wrappers and text-setter counter are
 removed before timing, so they do not inflate a mode's measured cost. Diagnostics
 explain *why* a result differs without assuming compilation always wins.
 
-The shared-state fixture uses direct module-array reads. Other shapes, including
-some derived sibling reads from the earlier control experiment, can retain a
-volatile reader even after compilation. This benchmark does not prove that all
-shared-state fallback checks disappear.
+The shared-state fixture uses direct module-array reads.
 
 ## Send back the report
 

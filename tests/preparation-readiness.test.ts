@@ -41,7 +41,7 @@ describe('consumed-resource preparation readiness', () => {
   const flush = () => inRuntime(() => { while (jobs.length) jobs.shift()!(); });
   beforeEach(() => {
     jobs = [];
-    runtime = createApplicationRuntime('preparation-readiness', { document, schedule: null });
+    runtime = createApplicationRuntime('preparation-readiness', { document });
     inRuntime(() => setScheduler(run => jobs.push(run)));
   });
   afterEach(() => runtime.dispose());
@@ -269,7 +269,7 @@ describe('consumed-resource preparation readiness', () => {
   });
 
   it('keeps borrowed observations isolated between generations in different runtimes', () => {
-    const other = createApplicationRuntime('other', { document, schedule: null });
+    const other = createApplicationRuntime('other', { document });
     const source = dependency();
     const left = inRuntime(() => createRenderPreparation());
     const right = runWithApplicationRuntime(other, () => createRenderPreparation());

@@ -27,33 +27,18 @@
 import { runWithApplicationRuntime } from './application-scope';
 import { advanceWriteEpoch } from './write-epoch';
 export { runWithApplicationRuntime } from './application-scope';
-export { register } from './volatile';
-export { markDirty, markDirtyMany, markDirtySubtree, markOwnerRootDirty } from './reasoned-invalidation';
-import {
-  clearDirtyReasons,
-  createDirtyReasonStore,
-  takeDirtyReasons,
-  type DirtyReasonInput,
-  type DirtyReasons,
-  type DirtyReasonStore,
-} from './dirty-reasons';
 import { clientEnvironment, resolveEnvironment, type RenderEnvironment } from './environment';
 export type EntityId = string;
-export type { DirtyReasonInput, DirtyReasons } from './dirty-reasons';
 
 /**
- * A mounted component instance.
- * `render` is the UPDATE branch only — the creation branch ran once at mount
- * and cached its nodes in a closure.
- * `depth` and `children` are managed by register(); callers only provide
- * id, parent, render.
+ * A mounted unit of update work: an effect, a source owner, a hot-replaced root.
+ * `render` runs the update; `depth` and `children` are managed by
+ * registerEntity(); callers only provide id, parent, render.
  */
 export interface Entity {
   id: EntityId;
   parent: EntityId | null;
-  render: (reasons?: DirtyReasons) => void;
-  /** Opaque pull state is conservatively reevaluated once per browser frame. */
-  volatile?: boolean;
+  render: () => void;
   /** Effects drain only after all ordinary render work is complete. */
   phase?: 'render' | 'effect';
   depth?: number;
@@ -114,12 +99,8 @@ const MAX_ENTITY_RENDERS_PER_COMMIT = 12;
 interface KernelState {
   readonly registry: Map<EntityId, Entity>;
   readonly dirty: Set<EntityId>;
-  /** Exact numeric causes per dirty entity until their next render. */
-  readonly dirtyReasons: DirtyReasonStore;
-  /** Cached id array for the access resolver — null when stale. */
+  /** Cached id array for `registeredIds()` — null when stale. */
   idsCache: EntityId[] | null;
-  /** Monotonic registry generation for resolver caches. */
-  generation: number;
   scheduler: Scheduler;
   scheduled: boolean;
   inCommit: boolean;
@@ -132,8 +113,6 @@ interface KernelState {
   heldSchedule: boolean;
   /** Cycle diagnostics — non-null only while a commit drain runs. */
   renderingEntity: EntityId | null;
-  /** Synchronous forwarding retains polling provenance, scoped to this runtime. */
-  pullUpdate: boolean;
   renderCounts: Map<EntityId, number> | null;
   markedBy: Map<EntityId, EntityId> | null;
   /**
@@ -154,16 +133,13 @@ function createKernelState(
   return {
     registry: new Map(),
     dirty: new Set(),
-    dirtyReasons: createDirtyReasonStore(),
     idsCache: null,
-    generation: 0,
     scheduler: defaultScheduler,
     scheduled: false,
     inCommit: false,
     holdScheduling: false,
     heldSchedule: false,
     renderingEntity: null,
-    pullUpdate: false,
     renderCounts: null,
     markedBy: null,
     extensions: new Map(),
@@ -213,12 +189,10 @@ export function createApplicationRuntime(
           catch (error) { errors.push(error); }
         }
         state.dirty.clear();
-        state.dirtyReasons.clear();
         state.idsCache = null;
         state.scheduled = false;
         state.inCommit = false;
         state.renderingEntity = null;
-        state.pullUpdate = false;
         state.renderCounts = null;
         state.markedBy = null;
         state.preparation = undefined;
@@ -348,7 +322,6 @@ export function runWithRenderEnvironment<T>(
   state.environment = {
     mode: overrides.mode ?? previous.mode,
     document: overrides.document ?? previous.document,
-    schedule: overrides.schedule !== undefined ? overrides.schedule : previous.schedule,
     effects: overrides.effects ?? previous.effects,
     refs: overrides.refs ?? previous.refs,
     creations: 'creations' in overrides ? overrides.creations : previous.creations,
@@ -379,14 +352,10 @@ export function resetScheduler(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Registry-change listeners and disposal hooks are STATIC infrastructure —
-// they are installed once per process (access resolver, cleanup module) and
-// carry no per-request state themselves. Per-request stores live on the
-// ApplicationRuntime instead.
+// Disposal and render hooks are STATIC infrastructure — they are installed
+// once per process (cleanup, effects, refs) and carry no per-request state
+// themselves. Per-request stores live on the ApplicationRuntime instead.
 // ---------------------------------------------------------------------------
-
-type RegistryListener = (id: EntityId, kind: 'add' | 'remove') => void;
-const registryListeners: RegistryListener[] = [];
 
 /**
  * Lifecycle features install their disposer lazily on first use. Keeping the
@@ -419,14 +388,6 @@ export function onEntityDispose(fn: EntityDisposeHook): void {
   if (!entityDisposeHooks.includes(fn)) entityDisposeHooks.push(fn);
 }
 
-export function onRegistryChange(fn: RegistryListener): void {
-  registryListeners.push(fn);
-}
-
-function notifyRegistry(id: EntityId, kind: 'add' | 'remove'): void {
-  for (const fn of registryListeners) fn(id, kind);
-}
-
 // ---------------------------------------------------------------------------
 // Registry
 // ---------------------------------------------------------------------------
@@ -440,12 +401,7 @@ function depthOf(id: EntityId): number {
   return d;
 }
 
-/** Current registry generation (introspection/resolver only). */
-export function registryGeneration(): number {
-  return getActiveApplicationRuntime().state.generation;
-}
-
-/** Compiler-known entity registration; polling is selected by its emitter. */
+/** Register an update entity under its parent (which registered first). */
 export function registerEntity(entity: Entity): void {
   const runtime = getActiveApplicationRuntime();
   const k = runtime.state;
@@ -464,9 +420,10 @@ export function registerEntity(entity: Entity): void {
   }
 
   k.idsCache = null;
-  k.generation++;
-  notifyRegistry(entity.id, 'add');
 }
+
+/** The public name of `registerEntity`. */
+export const register = registerEntity;
 
 /**
  * Unregister an entity and ALL its descendants — O(subtree), not O(registry).
@@ -490,7 +447,6 @@ function unregisterSubtreeInState(k: KernelState, id: EntityId): void {
   if (currentRoot !== undefined && children === undefined) {
     // Most registered rows have no descendants. Preserve ordinary disposal
     // without allocating a traversal stack, teardown list or empty error list.
-    k.generation++;
     removeRegisteredEntity(k, id);
     reportCleanupErrors(disposeEntity(id, null), id);
     return;
@@ -517,7 +473,6 @@ function unregisterSubtreeInState(k: KernelState, id: EntityId): void {
   // live registry before invoking user teardown so reentrant invalidation and
   // unregister calls become dead letters.
   teardown.reverse();
-  k.generation++;
   k.idsCache = null;
   for (const cur of teardown) {
     removeRegisteredEntity(k, cur);
@@ -532,11 +487,7 @@ function unregisterSubtreeInState(k: KernelState, id: EntityId): void {
 function removeRegisteredEntity(k: KernelState, id: EntityId): void {
   k.registry.delete(id);
   k.dirty.delete(id);
-  clearDirtyReasons(k.dirtyReasons, id);
-  // A registry listener can repopulate this cache after each removal. Clear
-  // it again before the next notification, not after user cleanup has run.
   k.idsCache = null;
-  notifyRegistry(id, 'remove');
 }
 
 function disposeEntity(id: EntityId, cleanupErrors: unknown[] | null): unknown[] | null {
@@ -570,47 +521,6 @@ export function has(id: EntityId): boolean {
 export function getEntity(id: EntityId): Entity | undefined {
   return getActiveApplicationRuntime().state.registry.get(id);
 }
-/**
- * Render the already-mounted descendants of one compiler-owned structural
- * entity, parent before child, and cancel duplicate scheduled renders.
- * Render-callback rows use this when their JSX contains component entities
- * whose lexical dependencies belong to the callback caller.
- */
-export function renderDescendants(id: EntityId): void {
-  const k = getActiveApplicationRuntime().state;
-  const visitRenderPhase = (parent: Entity): void => {
-    if (parent.children === undefined) return;
-    for (const childId of parent.children) {
-      const child = k.registry.get(childId);
-      if (child === undefined) continue;
-      if (child.phase !== 'effect') {
-        notifyEntityRender(child);
-        child.render();
-        undirty(childId);
-      }
-      visitRenderPhase(child);
-    }
-  };
-  const visitEffectPhase = (parent: Entity): void => {
-    if (parent.children === undefined) return;
-    for (const childId of parent.children) {
-      const child = k.registry.get(childId);
-      if (child === undefined) continue;
-      if (child.phase === 'effect') {
-        notifyEntityRender(child);
-        child.render();
-        undirty(childId);
-      }
-      visitEffectPhase(child);
-    }
-  };
-  const owner = k.registry.get(id);
-  if (owner !== undefined) {
-    visitRenderPhase(owner);
-    visitEffectPhase(owner);
-  }
-}
-
 export function registeredIds(): readonly EntityId[] {
   const k = getActiveApplicationRuntime().state;
   k.idsCache ??= [...k.registry.keys()];
@@ -624,46 +534,34 @@ export function registeredIds(): readonly EntityId[] {
  * Mark one entity dirty and schedule a commit.
  *
  * Dead letters (spec §9.7): marking an unmounted id is a silent no-op.
- * Exact causes use the optional adapter; full owner writes need no merger.
  */
 export function invalidateEntity(id: EntityId): void {
-  enqueueEntityInvalidation(id);
-}
-
-type DirtyReasonMerger = (store: DirtyReasonStore, id: EntityId, wasDirty: boolean, reason: DirtyReasonInput) => void;
-
-/** @internal Exact invalidation entry used by the optional cause adapter. */
-export function enqueueEntityInvalidation(
-  id: EntityId,
-  reason?: DirtyReasonInput,
-  merge?: DirtyReasonMerger,
-): void {
   advanceWriteEpoch();
   const runtime = getActiveApplicationRuntime();
-  if (enqueueDirty(runtime.state, id, reason, merge)) scheduleCommit(runtime);
+  if (enqueueDirty(runtime.state, id)) scheduleCommit(runtime);
 }
 
+/** The public name of `invalidateEntity`. */
+export const markDirty = invalidateEntity;
+
 /** @internal Enqueue a resolved write's readers before a synchronous commit. */
-export function enqueueEntityInvalidations(ids: readonly EntityId[], reason?: DirtyReasonInput, merge?: DirtyReasonMerger): void {
+export function enqueueEntityInvalidations(ids: readonly EntityId[]): void {
   if (ids.length === 0) return;
   advanceWriteEpoch();
   const runtime = getActiveApplicationRuntime();
   const k = runtime.state;
   let marked = false;
   for (const id of ids) {
-    if (enqueueDirty(k, id, reason, merge)) marked = true;
+    if (enqueueDirty(k, id)) marked = true;
   }
   if (marked) scheduleCommit(runtime);
 }
 
-function enqueueDirty(k: KernelState, id: EntityId, reason?: DirtyReasonInput, merge?: DirtyReasonMerger): boolean {
+function enqueueDirty(k: KernelState, id: EntityId): boolean {
   if (!k.registry.has(id)) return false;
   if (k.inCommit && k.markedBy !== null && k.renderingEntity !== null) {
     k.markedBy.set(id, k.renderingEntity);
   }
-  const wasDirty = k.dirty.has(id);
-  if (reason !== undefined) merge!(k.dirtyReasons, id, wasDirty, reason);
-  else if (wasDirty) clearDirtyReasons(k.dirtyReasons, id);
   k.dirty.add(id);
   return true;
 }
@@ -678,9 +576,7 @@ export function undirty(id: EntityId): void {
   const k = getActiveApplicationRuntime().state;
   // size gate first: rows are undirtied on EVERY reconcile resync (M5.7)
   // while almost never actually pending — skip the string hash lookup then
-  if (k.dirty.size !== 0 && k.dirty.delete(id)) {
-    clearDirtyReasons(k.dirtyReasons, id);
-  }
+  if (k.dirty.size !== 0) k.dirty.delete(id);
 }
 
 /**
@@ -692,57 +588,20 @@ export function committing(runtime: ApplicationRuntime): { readonly rendering: E
   return k.inCommit ? { rendering: k.renderingEntity } : undefined;
 }
 
-/** Compiler-owned prop forwarding must not turn a poll into a state write. */
-export function isPullUpdate(): boolean {
-  return getActiveApplicationRuntime().state.pullUpdate;
-}
-
-function runEntityUpdate(k: KernelState, entity: Entity, reasons: DirtyReasons): void {
-  const previous = k.pullUpdate;
-  k.pullUpdate = reasons === -1 || typeof reasons === 'object' && reasons !== null &&
-    reasons.size === 1 && reasons.has(-1);
-  try {
-    notifyEntityRender(entity);
-    entity.render(reasons);
-  }
-  finally { k.pullUpdate = previous; }
-}
-
-/** Drain a retained entity synchronously without discarding its pending causes. */
-export function renderEntity(id: EntityId): void {
-  const k = getActiveApplicationRuntime().state;
-  const entity = k.registry.get(id);
-  if (!entity) return;
-  const reasons = k.dirty.has(id) ? takeDirtyReasons(k.dirtyReasons, id) : k.pullUpdate ? -1 : null;
-  k.dirty.delete(id);
-  runEntityUpdate(k, entity, reasons);
-}
-
 /**
- * Mark an entity and ALL its descendants dirty — the fallback for an
- * unbounded effect (spec §4.4). Equivalent to re-rendering from the mounted
- * root: correct under any circumstance, just not scoped.
- *
- * NOTE: prefix scan (rare fallback path); teardown uses the children links.
- * The compiler may include an exact owner destination. Enqueue it before the
- * subtree so even synchronous schedulers commit both publications together.
- * Owners outside the fallback root retain their supplied reasons.
+ * Mark an entity and ALL its descendants dirty: a hot-replaced root that
+ * could not swap its components in place updates everything under it.
+ * A prefix scan (rare fallback path); teardown uses the children links.
  */
-export function enqueueSubtreeInvalidation(
-  id: EntityId,
-  ownerId?: EntityId,
-  ownerReason?: DirtyReasonInput,
-  merge?: DirtyReasonMerger,
-): void {
+export function markDirtySubtree(id: EntityId): void {
   advanceWriteEpoch();
   const runtime = getActiveApplicationRuntime();
   const k = runtime.state;
   const prefix = id + '/';
-  let marked = ownerId !== undefined && enqueueDirty(k, ownerId, ownerReason, merge);
+  let marked = false;
   for (const key of k.registry.keys()) {
     if (key === id || key.startsWith(prefix)) {
       k.dirty.add(key);
-      clearDirtyReasons(k.dirtyReasons, key);
       marked = true;
     }
   }
@@ -833,10 +692,7 @@ export function commit(): void {
         if (e) {
           if (failedEntities === null || !blockedByFailure(e)) pending.push(e);
         }
-        else {
-          k.dirty.delete(id); // dead letter: dirtied, then unregistered
-          clearDirtyReasons(k.dirtyReasons, id);
-        }
+        else k.dirty.delete(id); // dead letter: dirtied, then unregistered
       }
 
       // Render/computed work always drains before side effects. This gives
@@ -878,17 +734,14 @@ export function commit(): void {
           }
           k.renderingEntity = e.id;
           try {
-            runEntityUpdate(k, e, takeDirtyReasons(k.dirtyReasons, e.id));
+            notifyEntityRender(e);
+            e.render();
           } catch (error) {
             // A partial render may have stopped before some dependent slots.
-            // Keep a full dirty mark for the next commit; a later pull/write
-            // must not discard the consumed cause and leave those slots stale.
+            // Keep it dirty for the next commit so those slots are not left stale.
             // Effects retain their normal failure semantics, and teardown or
             // replacement during the failed render must not revive this entity.
-            if (e.phase !== 'effect' && k.registry.get(e.id) === e) {
-              k.dirty.add(e.id);
-              clearDirtyReasons(k.dirtyReasons, e.id);
-            }
+            if (e.phase !== 'effect' && k.registry.get(e.id) === e) k.dirty.add(e.id);
             if (e.phase === 'effect') throw error;
             (failedEntities ??= new Set()).add(e);
             (renderErrors ??= []).push(error);
@@ -927,9 +780,7 @@ export function commit(): void {
 export function _internals(): {
   registry: ReadonlyMap<EntityId, Entity>;
   dirtySet: ReadonlySet<EntityId>;
-  volatileSet: ReadonlySet<EntityId>;
 } {
   const k = getActiveApplicationRuntime().state;
-  const volatile = k.extensions.get('mmd:volatile') as { ids: Set<EntityId> } | undefined;
-  return { registry: k.registry, dirtySet: k.dirty, volatileSet: volatile?.ids ?? new Set() };
+  return { registry: k.registry, dirtySet: k.dirty };
 }
