@@ -350,9 +350,13 @@ checks before retention checks as well as in isolation when changing this fixtur
    - after a component edit, a Worker's Hono backend meets a second copy of `hono` (`cloudflare-host`,
      the dev case; the three built Workers pass);
    - the dev error overlay after a broken server import, and recovery after a server-only throw
-     (`dev-recovery-browser`); hydrated facade sources (`fullstack-browser`).
+     (`dev-recovery-browser`).
 
-   Fixed since (2026-11-22): lazy route navigation with `Group`, refs and effects
+   Fixed since (2026-11-22): hydrated facade sources (`fullstack-browser`), a test change by the
+   documented API: a POST server function returns a promise, tracked as `$read(postVote(id))`
+   (`docs/05-data.md`, "`$track(promise)` is unsupported"), and its result is guarded by a flag,
+   since `lastVote !== null` reads the payload, which a failed vote does not have (its initial
+   error follows the error policy). It now also checks the failed vote's rollback. Lazy route navigation with `Group`, refs and effects
    (`lazy-route-browser`). The server's program compiled the lazy page with readiness and the
    browser's without, so its HTML did not fit and hydration mounted the page again (`sources.md`,
    "The server's program compiles a component as the browser's does"). Its clock step now checks

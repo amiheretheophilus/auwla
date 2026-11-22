@@ -118,11 +118,12 @@ describe('fullstack browser integration', () => {
     `);
     await writeFile(resolve(fixture, 'App.tsx'), `
       import { getStories, getStory, postVote } from '#server-functions';
-      import { $track } from '@memoized-dom/data';
+      import { $read, $track } from '@memoized-dom/data';
       import { route } from '@memoized-dom/router';
       export function App() {
         let selectedId = null as number | null;
-        let lastVote = null as ReturnType<typeof postVote> | null;
+        let lastVote = null as { id: number; votes: number } | null;
+        let voted = false;
         const stories = getStories();
         const tab = route.query.get('tab') ?? 'board';
         return <main route="/">
@@ -137,7 +138,9 @@ describe('fullstack browser integration', () => {
               <span>{story.title}: {story.votes}</span>
               <button data-detail={story.id} onClick={() => { selectedId = story.id; }}>Details</button>
               <button data-vote={story.id} onClick={() => {
-                lastVote = postVote(story.id);
+                // A POST returns a promise; \`$read\` makes it a source to track (docs/05-data.md).
+                lastVote = $read(postVote(story.id));
+                voted = true;
                 const tracked = $track(lastVote);
                 story.votes++;
                 tracked.onError(() => { story.votes--; });
@@ -148,7 +151,8 @@ describe('fullstack browser integration', () => {
               }}>Open project</a>
             </li>)}</ul>
             {selectedId !== null && <Detail id={selectedId} />}
-            {lastVote !== null && <output>
+            {/* Not \`lastVote !== null\`: that reads the payload, and a failed vote has none. */}
+            {voted && <output>
               {$track(lastVote).pending
                 ? 'Voting'
                 : $track(lastVote).error !== null
@@ -301,6 +305,8 @@ describe('fullstack browser integration', () => {
     );
     await page.click('[data-vote="2"]');
     await page.waitForFunction(() => document.querySelector('output')?.textContent === 'Vote failed');
+    // The failed vote rolled back its optimistic write.
+    await page.waitForFunction(() => document.querySelectorAll('li span')[1]?.textContent === 'Second: 5');
     await page.click('[data-detail="2"]');
     await page.waitForFunction(() => document.querySelector('article')?.textContent === 'Second');
 
