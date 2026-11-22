@@ -350,8 +350,14 @@ checks before retention checks as well as in isolation when changing this fixtur
    - after a component edit, a Worker's Hono backend meets a second copy of `hono` (`cloudflare-host`,
      the dev case; the three built Workers pass);
    - the dev error overlay after a broken server import, and recovery after a server-only throw
-     (`dev-recovery-browser`); hydrated facade sources (`fullstack-browser`); lazy route navigation
-     with `Group`, refs and effects (`lazy-route-browser`).
+     (`dev-recovery-browser`); hydrated facade sources (`fullstack-browser`).
+
+   Fixed since (2026-11-22): lazy route navigation with `Group`, refs and effects
+   (`lazy-route-browser`). The server's program compiled the lazy page with readiness and the
+   browser's without, so its HTML did not fit and hydration mounted the page again (`sources.md`,
+   "The server's program compiles a component as the browser's does"). Its clock step now checks
+   that a global changed outside compiled code is not polled, and shows at the next mount
+   (`handlers.md`, "State a package keeps").
 
    **The examples on the compiler** (2026-11-18, step 5). `examples/stress-lab`'s own tests compile
    with the compiler: 164 of 175 pass. They found three bugs, fixed with cases: edits through

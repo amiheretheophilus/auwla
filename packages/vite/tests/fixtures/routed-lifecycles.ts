@@ -51,8 +51,11 @@ export async function checkRoutedLifecycles(page: Page): Promise<void> {
   await page.waitForFunction(() => document.querySelector('output')?.textContent === '1'
     && window.__routeEvents.includes('effect:1'));
   expect(await page.$eval('input', node => [node.value, node.getAttribute('data-bound')])).toEqual(['1', 'yes']);
+  // A change made outside compiled code is not polled (wiki/compiler/handlers.md, "State a package
+  // keeps"): the clock keeps its value until Detail mounts again, checked after navigating back.
   await page.evaluate(() => { window.__routeClock = 23; });
-  await page.waitForFunction(() => document.querySelector('.clock')?.textContent === '23');
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  expect(await page.$eval('.clock', node => node.textContent)).toBe('10');
   await page.click('.home');
   await page.waitForSelector('h1');
   expect(await page.$eval('h1', node => node.textContent)).toBe('Ada');

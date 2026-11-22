@@ -72,6 +72,47 @@ describe('applications', () => {
     expect(build.client.output['./src/main.ts']).toContain('@memoized-dom/runtime/hydrate');
   });
 
+  it("compile a component without data the same way in the browser and in the server's program", async () => {
+    // The server entry's `@memoized-dom/server` becomes a generated module, and its `app.ssr(App)`
+    // once counted as unknown code running a component that waits. Every call anywhere could then
+    // wait, so the server compiled `Badge` with readiness and the browser without: the server's
+    // HTML did not fit the browser's template, and hydration mounted the page again.
+    const files: Record<string, string> = {
+      './src/main.ts': FILES['./src/main.ts']!,
+      './src/App.tsx': `import { $fetch } from '@memoized-dom/data';
+import { Badge } from './Badge';
+export function App() { const user = $fetch('/api/user'); return <main><h1>{user.name}</h1><Badge /></main>; }`,
+      './src/Badge.tsx': `export function Badge() { let count = 0; return <button onClick={() => count++}>{'go'.toUpperCase()} {count}</button>; }`,
+    };
+    const servers = [
+      `import { serve } from '@memoized-dom/server';
+import { App } from './src/App';
+const app = serve({});
+app.get('/api/user', () => ({ name: 'Ada' }));
+app.ssr(App);
+export default app;`,
+      // A backend from a package, outside the program.
+      `import { serve } from '@memoized-dom/server';
+import { Hono } from 'hono';
+import { App } from './src/App';
+const api = new Hono();
+api.get('/api/user', (context) => context.json({ name: 'Ada' }));
+const app = serve({});
+app.ssr(App);
+export default { fetch: (request) => api.fetch(request) };`,
+    ];
+    for (const server of servers) {
+      const build = await createApplication({
+        client: './src/main.ts', server: { entry: './server.ts' }, host: memoryHost({ ...files, './server.ts': server }),
+      }).build();
+      expect(build.client.ok && build.server?.ok).toBe(true);
+      if (!build.client.ok || !build.server?.ok) return;
+
+      expect(build.client.output['./src/Badge.tsx']).not.toContain('@memoized-dom/data');
+      expect(build.server.output['./src/Badge.tsx']).not.toContain('@memoized-dom/data');
+    }
+  });
+
   it('build the server with its routes, handlers and the delivery it is given', async () => {
     const application = createApplication({ client: './src/main.ts', server: { ...SERVER, delivery: './delivery.ts' }, host: memoryHost(FILES) });
     const build = await application.build();

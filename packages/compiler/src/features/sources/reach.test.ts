@@ -136,6 +136,32 @@ describe('readiness reach', () => {
 
       expect(mounted).not.toBe(alone);
     });
+
+    // A server build compiles the server entry with the components. Before, `app.ssr(App)` ran App
+    // from unknown code, so App compiled with readiness on the server and without it in the
+    // browser, and the server's HTML did not fit the browser's templates.
+    const server = (setup: string) => compileModules({
+      './App.tsx': app,
+      './server.ts': `${setup}
+        import { App } from './App';
+        app.get('/api/user', () => ({ name: 'Ada' }));
+        app.ssr(App);
+        export default app;`,
+    })['./App.tsx']!;
+
+    it("does not count a server app's ssr(App) or its handlers as unknown code", () => {
+      const alone = compileModules({ './App.tsx': app })['./App.tsx']!;
+
+      expect(server(`import { serve } from '@memoized-dom/server'; const app = serve({});`)).toBe(alone);
+      expect(server(`import { serve } from '@memoized-dom/server'; const app = serve({}).get('/', () => 'ok');`)).toBe(alone);
+    });
+
+    it('still counts the same calls on a value from code the proof cannot see', () => {
+      const alone = compileModules({ './App.tsx': app })['./App.tsx']!;
+
+      expect(server(`function serve() { return globalThis.server; } const app = serve();`)).not.toBe(alone);
+      expect(server(`import { serve } from '@memoized-dom/server'; let app = serve({}); app = globalThis.server;`)).not.toBe(alone);
+    });
   });
 
   describe('entries', () => {
@@ -346,6 +372,23 @@ describe('readiness reach', () => {
 
     const authored = compileModules(files("import('./Page').then((module) => record(module));"), options)['./App.tsx']!;
     expect(authored).toMatch(/sourceBindingInput\(event/);
+  });
+
+  it("sees the source a server function's facade returns", () => {
+    // `server/generate.ts` writes these facades. Before, the internal creators counted as unknown
+    // code, so a page or live function's result was a source only where something else in the
+    // program made every unknown value one: a server's program showed its page as `[object Object]`.
+    for (const creator of ['createPageSource', 'createStreamingSource']) {
+      const output = compileModules({
+        './main.ts': `import { mount } from '@memoized-dom/runtime';\nimport { App } from './App';\nmount('root', App);\n`,
+        './board.ts': `import { ${creator} as __mmd_source } from '@memoized-dom/data/internal';
+          export function getBoard() { return __mmd_source('/_fn/boards/getBoard', {}, 'live'); }`,
+        './App.tsx': `import { getBoard } from './board';
+          export function App() { const board = getBoard(); return <main>{board}</main>; }`,
+      }, { entries: ['./main.ts'] })['./App.tsx']!;
+
+      expect(output).toMatch(/readSourceValue\(board\)/);
+    }
   });
 
   it('keeps every guard when eval is present', () => {

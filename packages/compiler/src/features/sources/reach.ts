@@ -113,10 +113,14 @@ export class SourceReach {
       }
     }
 
+    const backend = backendModules(graph);
     for (const { module } of graph.resolved.modules) {
       this.#bindings.push(...module.bindings);
       this.#everything ||= module.findAll('WithStatement').length > 0
         || module.findAll('CallExpression').some((call) => is.Identifier(call.callee) && call.callee.name === 'eval');
+      // Backend code no render imports runs outside every render (`backendModules`): what it
+      // imports from outside the graph (a server's `hono`, the tool's delivery) reaches no render.
+      if (backend.has(module)) continue;
 
       // Code outside the graph may create its own sources, and a dynamically
       // imported namespace is read without this proof's member resolution.
@@ -154,6 +158,10 @@ export class SourceReach {
     }
 
     for (const { module } of graph.resolved.modules) {
+      // Nor does what backend code hands to unknown code, or a function of it the server runs:
+      // `export default app`, a route handler. Neither runs inside a render.
+      if (backend.has(module)) continue;
+
       for (const fn of module.findAll(FUNCTION_TYPES)) {
         this.#invocations.set(fn, this.#invocationsOf(module, fn));
       }
@@ -705,6 +713,10 @@ export class SourceReach {
       return api !== '$track';
     }
 
+    if (is.CallExpression(call) && internalSourceCall(module, call.callee)) {
+      return true;
+    }
+
     if (is.CallExpression(call) && lifecycleKind(module, call) !== null) {
       return false;
     }
@@ -828,7 +840,7 @@ export class SourceReach {
   /** Framework calls never run an escaped function synchronously. */
   #quiet(module: Module, call: CallNode): boolean {
     return (is.CallExpression(call) && (dataExport(module, call.callee) !== null || lifecycleKind(module, call) !== null))
-      || frameworkImport(module, call.callee);
+      || frameworkImport(module, call.callee) || frameworkValueCall(module, call) || internalSourceCall(module, call.callee);
   }
 
   // ---- Unknown code ----
@@ -989,8 +1001,10 @@ export class SourceReach {
       return;
     }
 
-    // `mount('root', App)` starts a root of its own, with nothing from this caller.
-    if (is.CallExpression(parent) && parent.callee !== position && isFrameworkMount(module, parent)) {
+    // `mount('root', App)` starts a root of its own, with nothing from this caller. So does a
+    // server's `app.ssr(App)`, and `app.get(path, handler)` runs per request (`frameworkValueCall`).
+    if (is.CallExpression(parent) && parent.callee !== position
+      && (isFrameworkMount(module, parent) || frameworkValueCall(module, parent))) {
       return;
     }
 
@@ -1117,6 +1131,31 @@ export class SourceReach {
   }
 }
 
+/**
+ * Declared server-only modules (the `serverOnly` option) that only other such modules import: the
+ * server entry, its generated `serve()` wrapper and route registry. They run once per request or
+ * at start, outside every render, and hand a render nothing but components (`app.ssr(App)`,
+ * `frameworkValueCall`). Before 2026-11-22 the wrapper's import of the tool's delivery module, or
+ * an entry's `import { Hono } from 'hono'`, made every value from unknown code a possible source
+ * in the server's program only, so its components compiled with readiness, the browser's without,
+ * and the server's HTML did not fit the browser's templates. A server-only module a component
+ * imports keeps its imports counted.
+ */
+function backendModules(graph: SemanticGraph): Set<Module> {
+  const backend = new Set(graph.resolved.modules.map(({ module }) => module).filter((module) => graph.resolved.serverOnly(module)));
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const { module } of graph.resolved.modules) {
+      if (backend.has(module)) continue;
+      for (const imported of module.imports) {
+        const target = imported.resolvedModule;
+        if (target !== null && backend.delete(target)) changed = true;
+      }
+    }
+  }
+  return backend;
+}
+
 /** Visible to code outside the graph under an exported name. */
 function exported(module: Module, binding: Binding): boolean {
   const declarator = variableDeclaration(binding);
@@ -1240,6 +1279,56 @@ function isRouteModuleLoad(module: Module, load: Node): boolean {
       && is.Literal(member.property) && typeof member.property.value === 'string'
       && module.parentOf(member) === body && body.arguments.includes(member as never);
   });
+}
+
+/**
+ * A method call on what a framework call returned, other than the data package's:
+ * `app.ssr(App)` and `app.get(path, handler)` on `const app = serve(…)`, also chained
+ * (`serve(…).get(…)`). The server renders a component as a root of its own, as `mount` does, and
+ * runs a handler per request, outside any render. Before 2026-11-22 `app.ssr(App)` handed `App`
+ * to unknown code, so a server build took any call or member read anywhere for a possible wait
+ * and put readiness into components the browser build compiled without it: their server HTML
+ * did not fit the browser's templates, and hydration mounted the page again.
+ */
+function frameworkValueCall(module: Module, call: Node): boolean {
+  if (!is.CallExpression(call)) return false;
+  const callee = unwrap(call.callee as Expression);
+  if (!is.MemberExpression(callee)) return false;
+  const object = unwrap(callee.object as Expression);
+  if (is.CallExpression(object)) return namesFramework(module, object.callee) || frameworkValueCall(module, object);
+  const binding = is.Identifier(object) ? module.referenceOf(object)?.binding ?? null : null;
+  const declarator = binding === null ? null : variableDeclaration(binding);
+  if (declarator === null || !is.Identifier(declarator.id) || declarator.init === null) return false;
+  const declaration = module.parentOf(declarator);
+  if (!is.VariableDeclaration(declaration) || declaration.kind !== 'const') return false;
+  const init = unwrap(declarator.init as Expression);
+  return is.CallExpression(init) && (namesFramework(module, init.callee) || frameworkValueCall(module, init));
+}
+
+/**
+ * A callee imported from a framework package other than the data package, by its specifier. A
+ * server build compiles the entry's `@memoized-dom/server` as a generated module wrapping the
+ * package's `serve()` (`server/application.ts`), which `frameworkImport` no longer counts.
+ */
+function namesFramework(module: Module, callee: Node): boolean {
+  const value = unwrap(callee as Expression);
+  const binding = is.Identifier(value) ? module.referenceOf(value)?.binding ?? null : null;
+  const imported = binding === null ? undefined : importOf(binding);
+  return imported !== undefined && !imported.typeOnly && isFramework(imported.specifier) && !isDataPackage(imported.specifier);
+}
+
+/**
+ * The data package's internal source creators, which a server function's facade calls
+ * (`server/generate.ts`): `getBoard()` returns `createPageSource(…)`, a live function
+ * `createStreamingSource(…)`. Before 2026-11-22 they counted as unknown code, so their sources
+ * were seen only where something else had made every unknown value a possible source.
+ */
+function internalSourceCall(module: Module, callee: Node): boolean {
+  const value = unwrap(callee as Expression);
+  const binding = is.Identifier(value) ? module.referenceOf(value)?.binding ?? null : null;
+  const imported = binding === null ? undefined : importOf(binding);
+  return imported !== undefined && !imported.typeOnly && imported.specifier.endsWith('/internal')
+    && isDataPackage(imported.specifier) && (imported.name === 'createPageSource' || imported.name === 'createStreamingSource');
 }
 
 function isDataPackage(specifier: string): boolean {

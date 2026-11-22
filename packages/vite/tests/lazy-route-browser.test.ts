@@ -35,7 +35,7 @@ afterEach(async () => {
 }, 30_000);
 
 describe('route-only component chunks', () => {
-  it.skipIf(!chromeExecutable())('preserves Group, refs, effects and opaque updates through lazy navigation and direct hydration', async () => {
+  it.skipIf(!chromeExecutable())('preserves Group, refs, effects and opaque reads through lazy navigation and direct hydration', async () => {
     const executablePath = chromeExecutable();
     if (executablePath === null) {
 

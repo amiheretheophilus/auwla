@@ -514,6 +514,32 @@ reaches the page through the form, already a source. Nor does a component's clos
 flag, found in Triaxis: a form action awaiting a server function, and `<AuthForm>…</AuthForm>`
 with a prop read from a form, each made every host call in the app a possible wait.
 
+**The server's program compiles a component as the browser's does** (2026-11-22). A server build
+also holds the server entry and its generated modules, and the proof read them as any other code,
+so it set both flags there and not in the browser: a component without data compiled with
+readiness on the server, its server HTML did not fit the browser's template, and hydration mounted
+the page again (`lazy-route-browser`, with its lazy `Detail`). Three causes, each fixed in
+`reach.ts`:
+
+- `app.ssr(App)` handed `App` to unknown code. A method call on what a framework call returned
+  (`const app = serve(…)`, also chained) now counts as `mount` does (`frameworkValueCall`), by
+  the import's specifier, since a server build compiles the entry's `@memoized-dom/server` as a
+  generated wrapper of `serve()`.
+- Backend code (`serverOnly` modules no other module imports: the entry, the generated `serve()`
+  wrapper and route registry, `backendModules`) runs outside every render. Its imports from
+  outside the graph (the tool's delivery module, a backend's `hono`), what it hands to unknown
+  code (`export default app`) and its functions the server runs (route handlers) set neither flag.
+  A server-only module a component imports still counts.
+- A server function's facade returns `createPageSource(…)` or `createStreamingSource(…)` from
+  `@memoized-dom/data/internal` (`server/generate.ts`). These are sources now
+  (`internalSourceCall`); they had counted as unknown code, a source only where a flag was set,
+  which the first two fixes cleared on the server: a server page showed `[object Object]`
+  (`pages.app.test.ts`).
+
+Cases: `reach.test.ts` ("a server app's ssr(App)", "the source a server function's facade
+returns") and `application.test.ts` (a component without data compiles alike on both sides, also
+under a `hono` backend).
+
 A read wrapped in `readSourceValue(…)` ends its chain there. In `forms.result?.photos.map(…)`,
 wrapping `forms.result?.photos` meant `.map` ran on undefined when there was no `result`. A chain
 with an optional link under a wrapped read now tests the link's object first, in a module
