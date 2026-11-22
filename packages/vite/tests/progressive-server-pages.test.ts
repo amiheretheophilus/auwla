@@ -65,7 +65,9 @@ it.skipIf(!chrome).each(['development','production'] as const)('fills nested ser
     expect(await tab.evaluate(()=>document.querySelector('[data-draft]')===(window as unknown as {draft:Element}).draft)).toBe(true);
     expect(await tab.evaluate(()=>document.activeElement===document.querySelector('[data-draft]'))).toBe(true);
     await fetch(origin+'/release-notes');await navigating;
-    await tab.waitForFunction(()=>typeof(document.querySelector('[data-local]') as HTMLButtonElement|null)?.onclick==='function',{timeout:15_000});
+    // Mounted: the root has taken over the stream (`runtime/src/payload.ts`). Listeners are added
+    // with addEventListener (`runtime/src/setters.ts`), so `onclick` says nothing about it.
+    await tab.waitForFunction(()=>(window as unknown as Record<symbol,{owns(root:string):boolean}|undefined>)[Symbol.for('memoized-dom:stream')]?.owns('./App.tsx#App')===true,{timeout:15_000});
     expect(await tab.$eval('[data-notes]',node=>node.textContent)).toBe('Notes ready');
     expect(await tab.$eval('[data-draft]',node=>(node as HTMLInputElement).value)).toBe(typed);
     expect(await tab.evaluate(()=>document.querySelector('[data-draft]')===(window as unknown as {draft:Element}).draft)).toBe(true);

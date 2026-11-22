@@ -349,7 +349,7 @@ function createSlot(text: Text, owner: RenderOwner, indexed: boolean, scope = re
     if (page !== null && page.holds(value)) return;
     clear();
     open('mmd:page');
-    page = buildInScope(scope, 'v', () => mountPage(value));
+    page = buildInScope(scope, 'v', () => mountPage(value, scope?.creations));
     const parent = text.parentNode!;
     for (const node of page.nodes) parent.insertBefore(node, text);
   }

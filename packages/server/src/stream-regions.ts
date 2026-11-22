@@ -78,6 +78,22 @@ function creationsIn(node: StringRenderableNode, creationOf: (node: StringRender
   return found;
 }
 
+/**
+ * Whether two HTML strings differ only where a progressive page's HTML went from `before` to
+ * `after`, which the source delta carries with the page's own regions. Unique request-generation
+ * attributes make each page's extent exact.
+ */
+function sameApartFromPages(previous: string, current: string, pageChanges: readonly { before: string; after: string }[]): boolean {
+  if (previous === current) return true;
+  if (pageChanges.length === 0) return false;
+  let before = previous, after = current;
+  for (const [index, page] of pageChanges.entries()) {
+    const token = `<!--mmd:page-progress:${index}-->`;
+    before = before.replaceAll(page.before, token); after = after.replaceAll(page.after, token);
+  }
+  return before === after;
+}
+
 /** Remembers each range as last sent and reports the ones that changed. */
 export class RegionTracker {
   readonly #sent = new Map<string, string>();
@@ -94,14 +110,26 @@ export class RegionTracker {
     private readonly creationOf?: (node: StringRenderableNode) => string | undefined,
   ) {
     if (creationOf === undefined) this.#record(rangesIn(root, null));
-    else this.#recordCreations(creationsIn(root, creationOf));
+    else this.#recordCreations(this.#topCreations());
+  }
+
+  /**
+   * The outermost numbered elements: the root itself when it is one. A component's root element
+   * (`<main>`) is creation 0; before 2026-11-22 only the numbered elements inside it were
+   * regions, so content a value slot put straight into it (a server page, shown when its first
+   * frame arrived) changed no region and reached the browser only when the document ended.
+   */
+  #topCreations(): StringRenderableNode[] {
+    return this.root.nodeType === 1 && this.creationOf!(this.root) !== undefined
+      ? [this.root]
+      : creationsIn(this.root, this.creationOf!);
   }
 
   /** Changed ranges, outermost first; a sent range carries its descendants. */
   changes(pageChanges: readonly { before: string; after: string }[] = []): ChangedRegion[] {
     const changed: ChangedRegion[] = [];
     if (this.creationOf === undefined) this.#diff(rangesIn(this.root, null), changed, pageChanges);
-    else this.#diffCreations(creationsIn(this.root, this.creationOf), changed);
+    else this.#diffCreations(this.#topCreations(), changed, pageChanges);
     return changed;
   }
 
@@ -131,15 +159,17 @@ export class RegionTracker {
    * elements sends those instead, so a settled region replaces only itself. A region the browser
    * never received came inside a sent one.
    */
-  #diffCreations(nodes: readonly StringRenderableNode[], changed: ChangedRegion[]): void {
+  #diffCreations(nodes: readonly StringRenderableNode[], changed: ChangedRegion[], pageChanges: readonly { before: string; after: string }[]): void {
     for (const node of nodes) {
       const id = this.creationOf!(node)!;
       const { html, own } = this.#creationHtml(node);
       const previous = this.#sent.get(id);
       if (previous === html) continue;
-      if (previous !== undefined && this.#sentOwn.get(id) === own) {
-        this.#diffCreations(creationsIn(node, this.creationOf!), changed);
+      if (previous !== undefined && sameApartFromPages(this.#sentOwn.get(id)!, own, pageChanges)) {
+        // A progressive page's own regions travel in its source delta (`#diff`).
+        this.#diffCreations(creationsIn(node, this.creationOf!), changed, pageChanges);
         this.#sent.set(id, html);
+        this.#sentOwn.set(id, own);
         continue;
       }
       if (previous !== undefined) changed.push({ id: `[${id}`, html });
@@ -242,6 +272,12 @@ const CLIENT_STREAM = `(function(){var K=Symbol.for("memoized-dom:stream");` +
   `document.querySelectorAll("[data-mmd-page-render]").forEach(function(root){` +
   `if(root.getAttribute("data-mmd-page-render")!==p.id)return;var sequence=Number(root.getAttribute("data-mmd-page-sequence"));` +
   `p.regions.forEach(function(region){if(region.sequence<=sequence)return;var walker=document.createTreeWalker(root,128),open,node,depth=0;` +
+  // A numbered page region (compiler output) is the element after its marker, as in `swap`.
+  // Before 2026-11-22 only marker ranges were looked for, so a compiled page's sections stayed
+  // pending until the browser's program mounted.
+  `if(region.id.charAt(0)==="["){while(node=walker.nextNode())if(node.data===region.id){open=node.nextSibling;` +
+  `if(open&&open.nodeType===1){var numbered=document.createElement("template");numbered.innerHTML=region.html;` +
+  `open.parentNode.removeChild(open);node.parentNode.replaceChild(numbered.content,node)}return}return}` +
   `while(node=walker.nextNode()){if(!open){if(/^mmd:[cgl]:/.test(node.data)&&node.data.slice(6)===region.id)open=node;continue}` +
   `if(/^mmd:[rcgl]:/.test(node.data))depth++;else if(node.data==="/mmd"){if(!depth)break;depth--}}` +
   `if(!open||!node||open.parentNode!==node.parentNode)return;var template=document.createElement("template");template.innerHTML=region.html;` +

@@ -287,13 +287,16 @@ export function collectCreations(start: Node | null, end: Node | null, pool: Map
     if (node.nodeType === 8) {
       const number = /^\[(\d[\da-z:]*(?:\.\d+)?)(\/?)$/.exec((node as Comment).data);
       if (number !== null) {
+        // A server page's HTML (`content-region.ts`) is one creation; the numbers inside it are
+        // its own render's, which this program's must not meet.
+        const page = isPageAnchor(node.previousSibling);
         node.parentNode!.removeChild(node);
         if (number[2] === '' && next !== null && next !== end) {
           const created = next;
           next = created.nextSibling;
           created.parentNode!.removeChild(created);
           pool.set(number[1]!, created);
-          collectCreations(created.firstChild, null, pool);
+          if (!page) collectCreations(created.firstChild, null, pool);
         }
       }
     } else if (node.nodeType === 1) {
@@ -301,6 +304,11 @@ export function collectCreations(start: Node | null, end: Node | null, pool: Map
     }
     node = next;
   }
+}
+
+/** The anchor a value slot opens before a server page (`render-value.ts`, `writePage`). */
+function isPageAnchor(node: Node | null): boolean {
+  return node !== null && node.nodeType === 8 && (node as Comment).data === 'mmd:page';
 }
 
 /**

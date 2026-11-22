@@ -568,7 +568,8 @@ class StringHtmlChunk extends StringContainer implements StringRenderableNode {
     return new StringHtmlChunk(() => snapshot);
   }
 
-  override toString(): string { return this.write(); }
+  // A server page's HTML is a numbered creation (`runtime/src/content-region.ts`).
+  override toString(): string { return numbered(this, this.write()); }
 }
 
 const HTML_WRITER: NonNullable<DocumentLike['htmlWriter']> = Object.freeze({

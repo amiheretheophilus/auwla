@@ -345,8 +345,8 @@ checks before retention checks as well as in isolation when changing this fixtur
      `live-notes-effects`, which also still run `examples/fieldnotes`, against rule 16);
    - `$forms`: `form.pending` stays false while the action's request waits (`server-pages`, the
      browser half; its server half passes in development and production);
-   - a server page streamed in the document never shows its markup (`server-pages` stream mode,
-     `progressive-server-pages`: "Server page failed");
+   - a server page streamed in the document never shows its markup (`server-pages` stream mode;
+     `progressive-server-pages` is fixed, `server.md`, "A page streamed in the document");
    - after a component edit, a Worker's Hono backend meets a second copy of `hono` (`cloudflare-host`,
      the dev case; the three built Workers pass);
    - the dev error overlay after a broken server import, and recovery after a server-only throw

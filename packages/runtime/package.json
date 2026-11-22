@@ -8,7 +8,9 @@
   },
   "sideEffects": [
     "./dist/server.js",
-    "./dist/hydrate.js"
+    "./dist/hydrate.js",
+    "./src/server.ts",
+    "./src/hydrate.ts"
   ],
   "files": [
     "dist"

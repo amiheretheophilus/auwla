@@ -6,6 +6,7 @@ import { afterEach, expect, it } from 'bun:test';
 import { acceptPageContent, type PageContent } from '../packages/runtime/src/page-content';
 import { createValueSlot } from '../packages/runtime/src/render-value';
 import { registerEntity, unregisterSubtree } from '../packages/runtime/src/kernel';
+import { adoptRoot } from '../packages/runtime/src/adoption';
 
 afterEach(() => { unregisterSubtree('one'); unregisterSubtree('two'); document.body.replaceChildren(); });
 const shell = '<div><h1>Static</h1><input value="initial"><section><!--mmd:g:summary--><i>Summary loading</i><!--/mmd--></section><aside><!--mmd:g:notes--><i>Notes loading</i><!--/mmd--></aside></div>';
@@ -54,6 +55,37 @@ it('scopes equal compiler range IDs to their own mounted page and handles skippe
   expect(two.host.querySelector('aside')?.textContent).toBe('Notes loading');
   one.slot.dispose();
   two.slot.dispose();
+});
+
+it("adopts the server's page element, so what the user typed in it survives hydration", () => {
+  // As the server numbers it (`content-region.ts`): the slot's region takes 0 and the page's HTML
+  // 0v:0. The [0] inside is the page's own render's number, which the program's must not meet.
+  // Before 2026-11-22 the page was not numbered: adoption dropped it and parsed the HTML again.
+  const page = '<div data-mmd-page-render="first"><input value="initial"><!--[0--><b>own</b></div>';
+  document.body.innerHTML = `<main><!--open--><!--mmd:page--><!--[0v:0-->${page}<!--end--></main>`;
+  const host = document.querySelector('main')!;
+  const [open, end] = [host.firstChild!, host.lastChild!];
+  const serverPage = host.querySelector('div')!, input = host.querySelector('input')!;
+  input.value = 'typed';
+  const entity = { id: 'one', parent: null, render() {} };
+  registerEntity(entity);
+  const mismatches: unknown[] = [];
+
+  const fragment = adoptRoot(open, end, () => {
+    const fragment = document.createDocumentFragment();
+    const text = document.createTextNode('');
+    fragment.append(text);
+    createValueSlot(text, { id: 'one', entity, batch: null })
+      .write(acceptPageContent({ $mmd: 'page', version: 1, id: 'board', html: page, progress: { id: 'first', sequence: 1, complete: false, regions: [] } }));
+    return fragment;
+  }, (error) => mismatches.push(error));
+  host.append(fragment);
+
+  expect(mismatches).toEqual([]);
+  expect(host.querySelector('div')).toBe(serverPage);
+  expect(host.querySelector('input')).toBe(input);
+  expect(input.value).toBe('typed');
+  expect(host.querySelector('b')?.previousSibling?.nodeValue).toBe('[0');
 });
 
 it('keeps a committed page until a replacement generation completes', () => {

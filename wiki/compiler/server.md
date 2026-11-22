@@ -402,10 +402,11 @@ here (`../decisions.md`, 2026-11-14), so Vite, the Bun plugin and the command li
    slot shows page content through `mountPage` (`runtime/src/content-region.ts`, shared with the old
    compiler's `createContentRegion`). In the browser, `registerPageComponent`
    (`runtime/src/page-bindings.ts`) renders the component again into that element, in its own
-   runtime on the real document, and gives later inputs to its props cell. It does not adopt the
-   server's nodes: numbers of the page's own would collide with the containing app's, which
-   `collectCreations` gathers from everywhere inside its root. The browser gets the same code either
-   way; only the region's nodes are made again, once, when it is bound.
+   runtime on the real document, and gives later inputs to its props cell. It adopts the server's
+   page element (one creation of the containing app, 2026-11-22, below) but not the nodes inside:
+   numbers of the page's own would collide with the app's, so `collectCreations` pools the page
+   element whole. The browser gets the same code either way; only the region's inner nodes are made
+   again, once, when it is bound.
 
 The Vite suite's `packages/vite/tests/server-pages.test.ts` authored its board in `.tsrx`; since
 2026-11-17 it is `.tsx` and runs on the compiler (open items: `testing.md`). Not yet: progressive
@@ -418,6 +419,31 @@ It tracked only the old compiler's marker ranges, so a page from this compiler s
 browser never filled in what settled. It now chooses as the document stream does (`stream.ts`):
 numbered elements for the compiler output (2026-11-17). Checked by `packages/server/tests/pages.test.ts`,
 which compiles its pages with the compiler's `extractPages` since the old compiler's deletion.
+
+**A page streamed in the document** (2026-11-22, `progressive-server-pages`). An app whose
+`{overview}` shows such a page in a streamed document showed nothing of it until the document
+ended, five seconds later, and the page then failed its own settle budget. Four fixes:
+
+- The document's region tracker (`stream-regions.ts`) followed only the numbered elements inside a
+  component's root, never the root itself (`<main>`, creation 0). The page a value slot put
+  straight into it changed no region. A numbered root is now a region, and a later generation of
+  a page inside it is left to the page's source delta, as with marker ranges, so what the user
+  typed in the page is not replaced.
+- The browser's bootstrap applied a page's progress regions by marker ranges only; a compiled
+  page's regions are numbered (`[2v:1r0v:0`), found as `swap` finds them.
+- The page's HTML is now one creation of the slot that shows it (`content-region.ts`): the server
+  numbers it (`StringHtmlChunk` writes its number), and a browser adopting the document takes that
+  element when the page's HTML has it as its one root, so its input keeps what was typed and its
+  focus. `collectCreations` pools that element whole: the numbers inside are the page's own
+  render's. Its styles follow it, parsed again.
+- `@memoized-dom/runtime`'s `sideEffects` named only `dist/hydrate.js`, so a build aliasing the
+  runtime to its `src` (the Vite tests) dropped `import '@memoized-dom/runtime/hydrate'` and
+  mounted afresh; `src/hydrate.ts` and `src/server.ts` are listed too.
+
+The test waited for `onclick` to become a function to know the app had mounted, which only the old
+compiler's listeners did; it waits for the root to own the stream (`runtime/src/payload.ts`).
+Cases: `packages/server/tests/stream-regions.test.ts`, `tests/progressive-page-content.test.ts`
+("adopts the server's page element").
 
 **What an interactive page ships** (decided: (a)). The compiler's adoption is a client render that reuses
 the server's nodes (`delivery.md`, "Adopting existing nodes"), so a page's browser program is its

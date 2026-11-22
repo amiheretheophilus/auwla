@@ -1,25 +1,48 @@
 /** Server page content shown in a compiled child site (`render-value.ts`). */
+import type { Creations } from './adoption';
 import { getActiveEnvironment } from './kernel';
 import { pageBinder, pageBindingInputs, type PageBindingHandle, type PageContent } from './page-content';
 import { updatePageRegions } from './page-regions';
 
 /**
- * A page's nodes: its styles and HTML. On a server they are one node that prints `current()`'s
- * HTML when serialized, so a later generation is what the document gets.
+ * A page's nodes: its HTML, then its styles. On a server each is a node that prints `current()`'s
+ * content when serialized, so a later generation is what the document gets.
+ *
+ * The HTML is one creation (`adoption.ts`): the server numbers it, and a browser adopting the
+ * server's page takes that element when the page's HTML has it as its one root, so what the user
+ * typed or focused in it survives hydration. Before 2026-11-22 the page was never numbered: the
+ * browser dropped the server's page and parsed its HTML again, resetting a streamed page's input
+ * (`progressive-server-pages`). Styles are parsed again either way.
  */
-function pageNodes(value: PageContent, current: () => PageContent): Node[] {
+function pageNodes(value: PageContent, current: () => PageContent, creations: Creations | undefined): Node[] {
   const document = getActiveEnvironment().document;
+  const id = creations?.next();
   if (document.htmlWriter) {
-    return [document.htmlWriter.create(() => {
-      const page = current();
-      return (page.styles ?? []).map(css=>'<style data-mmd-page-style>'+css.replaceAll('<','\\3c ')+'</style>').join('')+page.html;
-    })];
+    const html = document.htmlWriter.create(() => current().html);
+    if (id !== undefined) creations!.note?.(html, id);
+    const styles = document.htmlWriter.create(() => (current().styles ?? [])
+      .map(css=>'<style data-mmd-page-style>'+css.replaceAll('<','\\3c ')+'</style>').join(''));
+    return [html, styles];
   }
+  const taken = id === undefined ? undefined : creations!.take?.(id);
   const template = document.createElement('template') as HTMLTemplateElement;
   template.innerHTML = value.html;
-  const nodes: Node[] = Array.from(template.content.childNodes);
-  nodes.unshift(...(value.styles ?? []).map(css=>{const style=document.createElement('style');style.setAttribute('data-mmd-page-style','');style.textContent=css;return style;}));
+  const parsed: Node[] = Array.from(template.content.childNodes);
+  const nodes = taken !== undefined && fitsPage(taken, parsed) ? [taken] : parsed;
+  nodes.push(...(value.styles ?? []).map(css=>{const style=document.createElement('style');style.setAttribute('data-mmd-page-style','');style.textContent=css;return style;}));
   return nodes;
+}
+
+/**
+ * Whether the server's page element is the page `parsed` holds: one root element of the same tag
+ * and, for a progressive page, the same render generation. The server page's regions were
+ * already filled in by the stream (`stream-regions.ts`), so its content is the page's.
+ */
+function fitsPage(taken: Node, parsed: readonly Node[]): boolean {
+  if (parsed.length !== 1 || parsed[0]!.nodeType !== 1 || taken.nodeType !== 1) return false;
+  const expected = parsed[0] as Element, server = taken as Element;
+  return server.localName === expected.localName
+    && server.getAttribute('data-mmd-page-render') === expected.getAttribute('data-mmd-page-render');
 }
 
 /** The element a progressive page's later regions are found in. */
@@ -49,15 +72,16 @@ export interface MountedPage {
 }
 
 /**
- * Mounts server page content: its HTML, bound by its registered program when it has one. Later content of the same bound page gives
+ * Mounts server page content: its HTML, bound by its registered program when it has one, numbered
+ * by `creations` (the value slot's region, `render-value.ts`). Later content of the same bound page gives
  * that program new inputs, keeping its local state; a later generation of a progressive page
  * fills in its regions.
  */
-export function mountPage(value: PageContent): MountedPage {
+export function mountPage(value: PageContent, creations?: Creations): MountedPage {
   const environment = getActiveEnvironment();
   const server = environment.mode.startsWith('server-');
   let active = value;
-  const nodes = pageNodes(value, () => active);
+  const nodes = pageNodes(value, () => active, creations);
   const root = !server && value.progress ? progressRoot(nodes) : undefined;
   let binding = value.binding && !server ? bindPage(value, nodes) : undefined;
   const sameGeneration = (next: PageContent) => next.progress !== undefined && active.progress !== undefined
