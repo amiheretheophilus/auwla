@@ -158,6 +158,62 @@ import { navigate } from '@memoized-dom/router';
 navigate('/story/:id', { params: { id: story.id } });
 ```
 
+Never set `window.location` or call `history.pushState` yourself: that reloads
+the page or leaves the router out of step, so `route`, `$routed` preparations
+and route code splitting stop working.
+
+### State in the URL: filters, search, pages
+
+State a user should be able to share or reload (a search, filters, the current
+page) belongs in the query. Read it from `route.query`, which is reactive, and
+write it with `navigate` and `replace: true`, so every keystroke does not add a
+history entry:
+
+```tsx
+import { navigate, route } from '@memoized-dom/router';
+
+export function Transactions() {
+  const search = route.query.get('search') ?? '';
+  const page = Number(route.query.get('page') ?? '1');
+  const results = getTransactions(page, search);   // refires when either changes
+
+  function setSearch(value: string) {
+    navigate('/transactions', { query: value ? { search: value } : {}, replace: true });
+  }
+  …
+}
+```
+
+## Page titles: `<head>`
+
+`<head>` written in a component puts its `title`, `meta` and `link` tags in the
+document's head while the component is on the page. The server writes them into
+the HTML it sends, so search engines and link previews see them:
+
+```tsx
+export function Story() {
+  const story = $routed(({ params, services }) => services.stories.find(params.id));
+  return (
+    <article>
+      <head>
+        <title>{story.title} · Stories</title>
+        <meta name="description" content={story.summary} />
+      </head>
+      <h1>{story.title}</h1>
+    </article>
+  );
+}
+```
+
+- The tags follow what they read, like any markup.
+- When several components set the same tag (`title`, `meta[name]`,
+  `meta[property]`, `link[rel=canonical]`), the deepest one wins, and the
+  layout's comes back when that page leaves. `index.html`'s tags are the default.
+- `<head>` holds only `title`, `meta`, `link` and expressions around them, one
+  `<title>` each, and takes no attributes.
+- Data in `$routed` is in the server's HTML title. Data a source loads while
+  the page streams reaches the browser's head when it arrives.
+
 ## Cheat sheet
 
 | Write | Get |
@@ -168,5 +224,7 @@ navigate('/story/:id', { params: { id: story.id } });
 | `<div route-to={…}>` | click → `navigateRoute` |
 | `route-to` with params | object form, exact param keys |
 | `route-to` to undeclared path | compile error — dead links impossible |
+| `navigate(path, { query, replace: true })` | URL state without history noise |
+| `<head><title>…</title></head>` | the page's title, in the server's HTML too |
 
 Next: [08 — Router API](./08-router-api.md)

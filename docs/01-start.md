@@ -2,6 +2,9 @@
 
 The smallest working Memoized DOM app. Five files, no boilerplate.
 
+Porting an app? [Coming from Next.js](./coming-from-nextjs.md) maps its
+idioms to this framework's.
+
 ## Install
 
 ```bash
