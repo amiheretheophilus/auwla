@@ -1,9 +1,7 @@
 # Development inspector design
 
-Status: initial implementation available in `@memoized-dom/devtools`. The
-separate package owns the UI, self-hosted typography, bounded capture and
-versioned metadata protocol. Vite provides the development-only launcher without
-application imports. See [usage and limits](../packages/devtools/README.md).
+Status: the first implementation (`@memoized-dom/devtools`) was removed on 2026-11-23 to be
+rewritten. This page records the earlier design as input for the rewrite.
 
 ## Why add an inspector
 

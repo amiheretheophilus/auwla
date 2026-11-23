@@ -2,12 +2,8 @@
 
 Development diagnostics explain the existing live protocol without changing
 function signatures, optimistic callbacks, invalidation rules, or delivery.
-The separate [`@memoized-dom/devtools` inspector](../packages/devtools/README.md)
-provides a UI over structured metadata: press **Alt+Shift+M** during development.
-It separates physical connections from logical subscriptions and retains bounded
-history only while open. No additional application query or SSE subscription is
-created. Native-server observations use the existing Vite HMR channel and are
-explicitly instance-scoped, not restricted to the viewing browser's requests.
+The same events go to the `memoized-dom:diagnostics:v1` hook, for a visual inspector
+(being rewritten).
 
 ## Finding the messages
 

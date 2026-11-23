@@ -5,7 +5,6 @@ import type { Duplex } from 'node:stream';
 import { toWebRequest, sendNodeResponse } from '@memoized-dom/adapters/node';
 import type { FullstackPluginApi } from './fullstack';
 import { developmentError, isDocumentRequest, recoveryDocument, serverUpdateEvent } from './dev-recovery';
-import { runWithDiagnosticSink } from '@memoized-dom/devtools/node';
 
 interface Backend {
   fetch(request: Request, platform?: unknown): Response | undefined | Promise<Response | undefined>;
@@ -96,8 +95,6 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
     },
   };
   const vite = await createViteServer(mergeConfig(inline, { plugins: [launcher] }));
-  const tooling = vite.config.plugins.find(plugin => plugin.name === 'memoized-dom')?.api as FullstackPluginApi | undefined;
-  const withDiagnostics = <T>(callback: () => T): T => runWithDiagnosticSink(tooling?.diagnosticSink, callback);
   if (workerHost) {
     try {
       await vite.listen();
@@ -174,7 +171,7 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
     };
     try {
       const application = generation.module.default;
-      const response = await withDiagnostics(() => application.fetch(request, application.installIntegration ? { platform } : platform));
+      const response = await application.fetch(request, application.installIntegration ? { platform } : platform);
       if (!response?.body) { await release(); return response; }
       const reader = response.body.getReader();
       const live = response.headers.get('content-type')?.includes('text/event-stream') &&
@@ -185,7 +182,7 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
         if (finished) return;
         finished = true;
         if (reconnect) generation.liveStreams.delete(reconnect);
-        try { await withDiagnostics(() => reader.cancel(reason)); }
+        try { await reader.cancel(reason); }
         finally { reader.releaseLock(); await release(); }
       };
       const stream = new ReadableStream<Uint8Array>({
@@ -203,7 +200,7 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
         },
         async pull(controller) {
           try {
-            const next = await withDiagnostics(() => reader.read());
+            const next = await reader.read();
             if (finished) return;
             if (next.done) { await finish(); controller.close(); }
             else controller.enqueue(next.value);

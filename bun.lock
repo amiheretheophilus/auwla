@@ -79,14 +79,6 @@
         "@memoized-dom/runtime": "workspace:*",
       },
     },
-    "packages/devtools": {
-      "name": "@memoized-dom/devtools",
-      "version": "0.0.1",
-      "devDependencies": {
-        "@fontsource-variable/geist": "^5.3.0",
-        "@fontsource-variable/geist-mono": "^5.3.0",
-      },
-    },
     "packages/editor-vscode": {
       "name": "memoized-dom-auwla",
       "version": "0.0.15",
@@ -172,7 +164,6 @@
       "dependencies": {
         "@memoized-dom/adapters": "workspace:*",
         "@memoized-dom/compiler": "workspace:*",
-        "@memoized-dom/devtools": "workspace:*",
         "@memoized-dom/server": "workspace:*",
         "magic-string": "0.30.21",
       },
@@ -303,10 +294,6 @@
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.28.1", "", { "os": "win32", "cpu": "x64" }, "sha512-bm4Mowrv+GXMlpWX++EcXw/iLyd1o3+bJkC2DkWXYVvgZCqD/bSj9ctZeAMC3cIxgjRVR2Dufaiu4YPxr5gW1A=="],
 
-    "@fontsource-variable/geist": ["@fontsource-variable/geist@5.3.0", "", {}, "sha512-j0m+vLQuG5XAYoHtGCVu0spvlGreR3EzpECUVzkFmI1mTVnAO38l/NEPDCFgZ177JxzYJCLSmTQibIiYPilGrA=="],
-
-    "@fontsource-variable/geist-mono": ["@fontsource-variable/geist-mono@5.3.0", "", {}, "sha512-vBbuwDEo9AkrqADMXOrlAR3DFcJi4/JxeuU43FoiQERnNwsfXNnvxvReZG02cQKmyk4DZkZdBZX3oTDvy2zBAw=="],
-
     "@happy-dom/global-registrator": ["@happy-dom/global-registrator@20.11.0", "", { "dependencies": { "@types/node": ">=20.0.0", "happy-dom": "^20.11.0" } }, "sha512-rHb/2dOy3APuHKNU4aqPQt+HbEt6BkulTTyCks89z5a+EipJecnFFd+3cz3meaFfCOXWsoxplPTLrGjFIEhd0A=="],
 
     "@img/colour": ["@img/colour@1.1.0", "", {}, "sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ=="],
@@ -378,8 +365,6 @@
     "@memoized-dom/compiler": ["@memoized-dom/compiler@workspace:packages/compiler"],
 
     "@memoized-dom/data": ["@memoized-dom/data@workspace:packages/data"],
-
-    "@memoized-dom/devtools": ["@memoized-dom/devtools@workspace:packages/devtools"],
 
     "@memoized-dom/example-octopulse": ["@memoized-dom/example-octopulse@workspace:examples/octopulse"],
 

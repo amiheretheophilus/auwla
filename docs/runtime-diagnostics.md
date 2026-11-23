@@ -1,10 +1,6 @@
 # Tracing events, bindings, and DOM updates
 
-Press **Alt+Shift+M** during development to open the separate
-[`@memoized-dom/devtools` inspector](../packages/devtools/README.md). Its Events
-and Regions views list attached sites before interaction and flash when they
-run, without enabling console output. There is no Reactivity tab. Console
-tracing remains available independently using the settings below.
+Console tracing is enabled with the settings below. A visual inspector is being rewritten.
 
 Run `memoized-dom dev`, enable **Verbose** in the browser's Console, and enable
 tracing from that Console:

@@ -36,7 +36,6 @@
   "dependencies": {
     "@memoized-dom/adapters": "workspace:*",
     "@memoized-dom/compiler": "workspace:*",
-    "@memoized-dom/devtools": "workspace:*",
     "@memoized-dom/server": "workspace:*",
     "magic-string": "0.30.21"
   },

@@ -85,8 +85,10 @@ and remove it once the owning wiki records it as done.
   (P3-EDITOR); auto-import and broader edit fidelity (P3-EDITING). [wiki2 plan](wiki2/plan.md)
 - [ ] **CI without `gh`**: the work machine cannot install `gh`. Trigger runs with `curl` and a
   token (the user chooses which), or put the workflow file on `main` (only if the user asks).
-- [ ] CI on GitHub Actions once the suite reaches thousands of cases; devtools are on hold.
-- [ ] **Runtime trace diagnostics** (on hold with devtools): the compiler's development output does
+- [ ] CI on GitHub Actions once the suite reaches thousands of cases.
+- [ ] **Devtools rewrite.** The old `packages/devtools` inspector was removed (2026-11-23) to be
+  rewritten. The runtime and data diagnostics still emit to the `memoized-dom:diagnostics:v1` hook.
+- [ ] **Runtime trace diagnostics** (waits for the devtools rewrite): the compiler's development output does
   not call the runtime's trace hooks (`runtime/src/diagnostics.ts`), which the old compiler did.
   `packages/vite/tests/cli.test.ts` skips its trace test until the project emits them.
 - [ ] **The auwla rename** across all packages, at once (`memo-dom:`, `mmd_*`, `memoized-dom/*`).

@@ -19,8 +19,6 @@ const documentEndpoint = '/__memoized/document';
 export const clientRootPlaceholder = '__MEMOIZED_CLIENT_ROOT__';
 
 export interface FullstackPluginApi {
-  /** @internal Native development diagnostics; never included in production application code. */
-  diagnosticSink?: (event: import('@memoized-dom/devtools').DiagnosticEvent) => void;
   readonly serverEntry?: string;
   readonly runtime: 'bun' | 'node' | 'cloudflare';
   nativeDevelopment: boolean;
