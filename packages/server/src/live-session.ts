@@ -1,25 +1,47 @@
-/** Private, process-local multiplexed SSE sessions. Never a general request proxy. */
+/**
+ * The shared live connection's server side: private, process-local sessions that carry many live
+ * reads over one stream (`/_memoized/live`). The browser opens a session with its first reads,
+ * then adds and removes reads with control requests. Each read is dispatched through the app's
+ * own routing and middleware as an ordinary live GET, so access checks and request state are the
+ * same as on a direct stream. Never a general request proxy: only registered live functions on
+ * the same origin can be subscribed.
+ */
 import { createLiveSubscription, liveErrorFields, liveQueryRejection, type LiveSubscription } from './live';
 import { encodeLiveFrame, LivePatchEncoder } from './live-patch';
 import { resolveLiveHeartbeatInterval } from './live-heartbeat';
 
 export const LIVE_SESSION_PATH = '/_memoized/live';
-const MAX_SUBSCRIPTIONS=64, MAX_SESSIONS=256, MAX_CONTROLS=4096;
-const MAX_BODY=65_536, MAX_FRAME=1_048_576, MAX_QUEUE=4_194_304;
-type Runner = <T>(work:()=>Promise<T>, signal:AbortSignal)=>Promise<T>;
-type Factory = (run:Runner)=>LiveSubscription;
-interface Capture { factory?:Factory; response:Response }
+
+/** Reads open in one session at a time. */
+const MAX_SUBSCRIPTIONS = 64;
+/** Sessions open in one process at a time. */
+const MAX_SESSIONS = 256;
+/** Subscription ids one session may ever use, so a client can't grow it without bound. */
+const MAX_CONTROLS = 4096;
+/** Size of one control request's body. */
+const MAX_BODY = 65_536;
+/** Size of one frame, and of all frames waiting to be sent. */
+const MAX_FRAME = 1_048_576;
+const MAX_QUEUE = 4_194_304;
+/** Live queries one session runs at the same time. */
+const MAX_ACTIVE_QUERIES = 8;
+
+type Runner = <T>(work: () => Promise<T>, signal: AbortSignal) => Promise<T>;
+type Factory = (run: Runner) => LiveSubscription;
+interface Capture { factory?: Factory; response: Response }
+
 // Generated routes and the native host can load different module instances.
 // The capability belongs to this in-memory Request, never an HTTP header.
-const CAPTURE=Symbol.for('memoized-dom:live-subscription-capture');
+const CAPTURE = Symbol.for('memoized-dom:live-subscription-capture');
 
 /** Called only by a registered live function, after its input and middleware checks. */
-export function captureLiveResponse(request:Request, factory:Factory):Response|undefined {
-  const capture=Reflect.get(request,CAPTURE) as Capture|undefined;
-  if(!capture)return;
-  capture.factory=factory;
+export function captureLiveResponse(request: Request, factory: Factory): Response | undefined {
+  const capture = Reflect.get(request, CAPTURE) as Capture | undefined;
+  if (!capture) return;
+  capture.factory = factory;
   return capture.response;
 }
+
 // Keep the engine constructor available here without exposing an authored transport API.
 export { createLiveSubscription };
 
@@ -31,202 +53,400 @@ export { createLiveSubscription };
  * response the browser must see stays direct: an error or a redirect, a body that replaced the
  * handoff, or a cookie to set.
  */
-function sharedStreamFactory(response:Response,capture:Capture):Factory|undefined {
-  return response.ok&&response.body===null&&!response.headers.has('set-cookie')?capture.factory:undefined;
+function sharedStreamFactory(response: Response, capture: Capture): Factory | undefined {
+  return response.ok && response.body === null && !response.headers.has('set-cookie') ? capture.factory : undefined;
 }
 
-interface Descriptor { id:string; url:string; page:boolean }
-interface Control { session?:string; revision:number; subscribe:Descriptor[]; unsubscribe:string[]; contentType?:string }
-interface Slot { abort:AbortController; engine?:LiveSubscription; encoder:LivePatchEncoder; pending:boolean; terminal:boolean }
-function fingerprint(request:Request):string {
-  return JSON.stringify([...request.headers].filter(([name])=>
-    !['content-length','accept-encoding','connection','host','origin','referer','user-agent','priority','traceparent','tracestate',
-      'x-real-ip','x-forwarded-for','x-forwarded-host','x-forwarded-proto','x-forwarded-port',
-      'cf-ray','cf-connecting-ip','cf-ipcountry','cf-visitor','cf-ew-via','cdn-loop'].includes(name)&&
-    !name.startsWith('sec-')).sort(([a],[b])=>a.localeCompare(b)));
+interface Descriptor { id: string; url: string; page: boolean }
+interface Control { session?: string; revision: number; subscribe: Descriptor[]; unsubscribe: string[]; contentType?: string }
+
+/** One read in a session. */
+interface Slot {
+  abort: AbortController;
+  /** Its live query, once the live function accepted the subscription. */
+  engine?: LiveSubscription;
+  encoder: LivePatchEncoder;
+  /** A value is being computed for it. */
+  pending: boolean;
+  /** Its last frame (an error or a fallback) is queued; it's removed once that is sent. */
+  terminal: boolean;
 }
-async function control(request:Request):Promise<Control> {
-  if(request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase()!=='application/json')throw new Error('Expected JSON controls');
-  if(!request.body)throw new Error('Missing controls');
-  const reader=request.body.getReader();let length=0;const chunks:Uint8Array[]=[];
-  try{for(;;){const next=await reader.read();if(next.done)break;length+=next.value.byteLength;if(length>MAX_BODY)throw new Error('Controls too large');chunks.push(next.value);}}
-  finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
-  const bytes=new Uint8Array(length);let offset=0;for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.length;}
-  const raw:unknown=JSON.parse(new TextDecoder().decode(bytes));
-  if(!raw||typeof raw!=='object')throw new Error('Invalid controls');
-  const value=raw as Record<string,unknown>;
-  if(value.version!==1||!Number.isSafeInteger(value.revision)||(value.revision as number)<1||
-    !Array.isArray(value.subscribe)||!Array.isArray(value.unsubscribe)||value.subscribe.length+value.unsubscribe.length>128||
-    value.session!==undefined&&typeof value.session!=='string'||
-    value.contentType!==undefined&&(typeof value.contentType!=='string'||value.contentType.length>256||/[\r\n]/.test(value.contentType)))throw new Error('Invalid controls');
-  const validId=(id:unknown):id is string=>typeof id==='string'&&/^[\w-]{1,80}$/.test(id);
-  if(!value.unsubscribe.every(validId))throw new Error('Invalid subscription identity');
-  for(const item of value.subscribe){
-    if(!item||typeof item!=='object'||!validId(item.id)||typeof item.url!=='string'||item.url.length>8192||typeof item.page!=='boolean')throw new Error('Invalid subscription');
+
+/** Headers that don't identify the reader: they may differ between a session's requests. */
+const UNSIGNED_HEADERS = new Set([
+  'content-length', 'accept-encoding', 'connection', 'host', 'origin', 'referer', 'user-agent', 'priority',
+  'traceparent', 'tracestate', 'x-real-ip', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto',
+  'x-forwarded-port', 'cf-ray', 'cf-connecting-ip', 'cf-ipcountry', 'cf-visitor', 'cf-ew-via', 'cdn-loop',
+]);
+
+/**
+ * The reader's credentials, as the headers that identify them (cookies, authorization). A session
+ * belongs to who opened it: controls from anyone else, or from the same browser after it signed in
+ * or out, are refused.
+ */
+function fingerprint(request: Request): string {
+  const signed = [...request.headers].filter(([name]) => !UNSIGNED_HEADERS.has(name) && !name.startsWith('sec-'));
+  return JSON.stringify(signed.sort(([a], [b]) => a.localeCompare(b)));
+}
+
+const validId = (id: unknown): id is string => typeof id === 'string' && /^[\w-]{1,80}$/.test(id);
+
+/** Read and check a control request's JSON body, bounded in size. */
+async function control(request: Request): Promise<Control> {
+  if (request.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() !== 'application/json') {
+    throw new Error('Expected JSON controls');
+  }
+  if (!request.body) throw new Error('Missing controls');
+  const reader = request.body.getReader();
+  let length = 0;
+  const chunks: Uint8Array[] = [];
+  try {
+    for (;;) {
+      const next = await reader.read();
+      if (next.done) break;
+      length += next.value.byteLength;
+      if (length > MAX_BODY) throw new Error('Controls too large');
+      chunks.push(next.value);
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.length;
+  }
+  const raw: unknown = JSON.parse(new TextDecoder().decode(bytes));
+  if (!raw || typeof raw !== 'object') throw new Error('Invalid controls');
+  const value = raw as Record<string, unknown>;
+  const valid = value.version === 1 && Number.isSafeInteger(value.revision) && (value.revision as number) >= 1
+    && Array.isArray(value.subscribe) && Array.isArray(value.unsubscribe)
+    && value.subscribe.length + value.unsubscribe.length <= 128
+    && (value.session === undefined || typeof value.session === 'string')
+    && (value.contentType === undefined || (typeof value.contentType === 'string'
+      && value.contentType.length <= 256 && !/[\r\n]/.test(value.contentType)));
+  if (!valid) throw new Error('Invalid controls');
+  if (!(value.unsubscribe as unknown[]).every(validId)) throw new Error('Invalid subscription identity');
+  for (const item of value.subscribe as unknown[]) {
+    const entry = item as Record<string, unknown> | null;
+    if (!entry || typeof entry !== 'object' || !validId(entry.id) || typeof entry.url !== 'string'
+      || entry.url.length > 8192 || typeof entry.page !== 'boolean') {
+      throw new Error('Invalid subscription');
+    }
   }
   return value as unknown as Control;
 }
 
 /** Each router owns its sessions; replacing a backend makes old controls reconnect. */
 export function createLiveSessions(
-  eligible:(path:string)=>boolean,
-  dispatch:(request:Request, platform:unknown)=>Promise<Response>,
+  eligible: (path: string) => boolean,
+  dispatch: (request: Request, platform: unknown) => Promise<Response>,
   heartbeatInterval?: number,
-):{handle(request:Request,platform?:unknown):Promise<Response>} {
+): { handle(request: Request, platform?: unknown): Promise<Response> } {
   const interval = resolveLiveHeartbeatInterval(heartbeatInterval);
-  const sessions=new Map<string,Session>();
+  const sessions = new Map<string, Session>();
+
   class Session {
-    readonly id=crypto.randomUUID();
-    readonly auth:string;
-    readonly slots=new Map<string,Slot>();
-    readonly used=new Set<string>();
-    readonly queue=new Map<string,Uint8Array>();
-    readonly abort=new AbortController();
-    revision=1;bytes=0;active=0;
-    waiting:Array<()=>void>=[];
-    controller?:ReadableStreamDefaultController<Uint8Array>;
-    wake?:()=>void;
-    timer?:ReturnType<typeof setTimeout>;
-    readonly stopRequest:()=>void;
-    constructor(readonly request:Request,readonly platform:unknown,readonly contentType:string|undefined){
-      this.auth=fingerprint(request);this.stopRequest=()=>this.stop();
-      request.signal.addEventListener('abort',this.stopRequest,{once:true});
+    readonly id = crypto.randomUUID();
+    readonly auth: string;
+    readonly slots = new Map<string, Slot>();
+    /** Every subscription id this session has used: an id is never reused. */
+    readonly used = new Set<string>();
+    /** The next frame of each read, waiting to be sent. One per read at a time. */
+    readonly queue = new Map<string, Uint8Array>();
+    readonly abort = new AbortController();
+    revision = 1;
+    /** Bytes in `queue`. */
+    bytes = 0;
+    /** Queries running now, and those waiting for a turn (`MAX_ACTIVE_QUERIES`). */
+    active = 0;
+    waiting: Array<() => void> = [];
+    controller?: ReadableStreamDefaultController<Uint8Array>;
+    wake?: () => void;
+    timer?: ReturnType<typeof setTimeout>;
+    readonly stopRequest: () => void;
+
+    constructor(readonly request: Request, readonly platform: unknown, readonly contentType: string | undefined) {
+      this.auth = fingerprint(request);
+      this.stopRequest = () => this.stop();
+      request.signal.addEventListener('abort', this.stopRequest, { once: true });
     }
-    stop(error?:string){
-      if(this.abort.signal.aborted)return;
-      this.abort.abort();sessions.delete(this.id);clearTimeout(this.timer);
-      this.request.signal.removeEventListener('abort',this.stopRequest);
-      for(const id of this.slots.keys())this.remove(id);
-      this.queue.clear();this.bytes=0;this.wake?.();
-      if(error){try{this.controller?.enqueue(encodeLiveFrame('session-error',{message:error}));this.controller?.close();}catch{}}
+
+    stop(error?: string): void {
+      if (this.abort.signal.aborted) return;
+      this.abort.abort();
+      sessions.delete(this.id);
+      clearTimeout(this.timer);
+      this.request.signal.removeEventListener('abort', this.stopRequest);
+      for (const id of this.slots.keys()) this.remove(id);
+      this.queue.clear();
+      this.bytes = 0;
+      this.wake?.();
+      if (!error) return;
+      try {
+        this.controller?.enqueue(encodeLiveFrame('session-error', { message: error }));
+        this.controller?.close();
+      } catch {
+        // The stream is already closed: nothing left to tell.
+      }
     }
-    remove(id:string){
-      const slot=this.slots.get(id);if(!slot)return;
-      this.slots.delete(id);slot.abort.abort();slot.engine?.cancel();
-      const frame=this.queue.get(id);if(frame){this.bytes-=frame.byteLength;this.queue.delete(id);}
+
+    remove(id: string): void {
+      const slot = this.slots.get(id);
+      if (!slot) return;
+      this.slots.delete(id);
+      slot.abort.abort();
+      slot.engine?.cancel();
+      const frame = this.queue.get(id);
+      if (frame) {
+        this.bytes -= frame.byteLength;
+        this.queue.delete(id);
+      }
     }
-    readonly run:Runner=async(work,signal)=>{
-      if(this.active>=8)await new Promise<void>((resolve,reject)=>{
-        const ready=()=>{this.active++;signal.removeEventListener('abort',cancel);resolve();};
-        const cancel=()=>{this.waiting=this.waiting.filter(item=>item!==ready);reject(signal.reason);};
-        this.waiting.push(ready);signal.addEventListener('abort',cancel,{once:true});if(signal.aborted)cancel();
-      });else this.active++;
-      try{signal.throwIfAborted();return await work();}finally{this.active--;this.waiting.shift()?.();}
+
+    /** Run a query when one of the session's turns is free. */
+    readonly run: Runner = async (work, signal) => {
+      if (this.active >= MAX_ACTIVE_QUERIES) {
+        await new Promise<void>((resolve, reject) => {
+          const ready = () => {
+            this.active++;
+            signal.removeEventListener('abort', cancel);
+            resolve();
+          };
+          const cancel = () => {
+            this.waiting = this.waiting.filter((item) => item !== ready);
+            reject(signal.reason);
+          };
+          this.waiting.push(ready);
+          signal.addEventListener('abort', cancel, { once: true });
+          if (signal.aborted) cancel();
+        });
+      } else {
+        this.active++;
+      }
+      try {
+        signal.throwIfAborted();
+        return await work();
+      } finally {
+        this.active--;
+        this.waiting.shift()?.();
+      }
     };
-    enqueue(id:string,bytes:Uint8Array){
-      if(!this.slots.has(id)||this.abort.signal.aborted)return;
+
+    enqueue(id: string, bytes: Uint8Array): void {
+      if (!this.slots.has(id) || this.abort.signal.aborted) return;
       // A later patch may depend on the queued frame's sequence. Replacing it
       // would corrupt that baseline, so fail loudly if serialization changes
       // ever allow more than one pending frame for a subscription.
-      if(this.queue.has(id)){this.stop('Live subscription produced overlapping frames');return;}
-      if(bytes.byteLength>MAX_FRAME||this.bytes+bytes.byteLength>MAX_QUEUE){this.stop('Live session delivery capacity exceeded');return;}
-      this.queue.set(id,bytes);this.bytes+=bytes.byteLength;this.wake?.();
+      if (this.queue.has(id)) {
+        this.stop('Live subscription produced overlapping frames');
+        return;
+      }
+      if (bytes.byteLength > MAX_FRAME || this.bytes + bytes.byteLength > MAX_QUEUE) {
+        this.stop('Live session delivery capacity exceeded');
+        return;
+      }
+      this.queue.set(id, bytes);
+      this.bytes += bytes.byteLength;
+      this.wake?.();
     }
-    arm(id:string,slot:Slot){
-      if(slot.pending||slot.terminal||!slot.engine||this.abort.signal.aborted)return;
-      slot.pending=true;
-      void slot.engine.next().then(next=>{
-        slot.pending=false;
-        if(this.slots.get(id)!==slot)return;
-        if(next.done){this.remove(id);return;}
-        try{this.enqueue(id,slot.encoder.encode(next.value.value,next.value.stamp,id));}
-        catch(error){slot.engine!.fail(error);throw error;}
-      }).catch(error=>{
-        slot.pending=false;
-        if(this.slots.get(id)!==slot)return;
-        slot.terminal=true;this.enqueue(id,encodeLiveFrame('error',{sub:id,...liveErrorFields(error)}));
+
+    /** Ask a read's query for its next value, unless one is already being computed. */
+    arm(id: string, slot: Slot): void {
+      if (slot.pending || slot.terminal || !slot.engine || this.abort.signal.aborted) return;
+      slot.pending = true;
+      void slot.engine.next().then((next) => {
+        slot.pending = false;
+        if (this.slots.get(id) !== slot) return;
+        if (next.done) {
+          this.remove(id);
+          return;
+        }
+        try {
+          this.enqueue(id, slot.encoder.encode(next.value.value, next.value.stamp, id));
+        } catch (error) {
+          slot.engine!.fail(error);
+          throw error;
+        }
+      }).catch((error) => {
+        slot.pending = false;
+        if (this.slots.get(id) !== slot) return;
+        slot.terminal = true;
+        this.enqueue(id, encodeLiveFrame('error', { sub: id, ...liveErrorFields(error) }));
       });
     }
-    add(item:Descriptor){
-      const slot:Slot={abort:new AbortController(),encoder:new LivePatchEncoder(true),pending:false,terminal:false};
-      this.slots.set(item.id,slot);this.used.add(item.id);
-      const headers=new Headers(this.request.headers);
-      for(const name of ['content-type','content-length','x-mmd-multiplex'])headers.delete(name);
-      if(this.contentType)headers.set('content-type',this.contentType);
-      headers.set('x-mmd-stream','live');headers.set('x-mmd-live-patches','2');
-      if(item.page)headers.set('x-mmd-page-stream','1');else headers.delete('x-mmd-page-stream');
-      const request=new Request(new URL(item.url,this.request.url),{headers,signal:slot.abort.signal});
-      const capture:Capture={response:new Response(null)};Object.defineProperty(request,CAPTURE,{value:capture,configurable:true});
-      void dispatch(request,this.platform).then(async response=>{
-        Reflect.deleteProperty(request,CAPTURE);
-        if(slot.abort.signal.aborted){await response.body?.cancel();return;}
-        const factory=sharedStreamFactory(response,capture);
-        if(!factory){
-          slot.terminal=true;
+
+    /** Subscribe one read: dispatch it as a live GET, and take its query if it's accepted. */
+    add(item: Descriptor): void {
+      const slot: Slot = { abort: new AbortController(), encoder: new LivePatchEncoder(true), pending: false, terminal: false };
+      this.slots.set(item.id, slot);
+      this.used.add(item.id);
+      const headers = new Headers(this.request.headers);
+      for (const name of ['content-type', 'content-length', 'x-mmd-multiplex']) headers.delete(name);
+      if (this.contentType) headers.set('content-type', this.contentType);
+      headers.set('x-mmd-stream', 'live');
+      headers.set('x-mmd-live-patches', '2');
+      if (item.page) headers.set('x-mmd-page-stream', '1');
+      else headers.delete('x-mmd-page-stream');
+      const request = new Request(new URL(item.url, this.request.url), { headers, signal: slot.abort.signal });
+      const capture: Capture = { response: new Response(null) };
+      Object.defineProperty(request, CAPTURE, { value: capture, configurable: true });
+
+      void dispatch(request, this.platform).then(async (response) => {
+        Reflect.deleteProperty(request, CAPTURE);
+        if (slot.abort.signal.aborted) {
+          await response.body?.cancel();
+          return;
+        }
+        const factory = sharedStreamFactory(response, capture);
+        if (!factory) {
+          slot.terminal = true;
           // An error middleware answered with is public, as it is on a plain GET or a direct stream.
-          if(response.status>=400){
-            this.enqueue(item.id,encodeLiveFrame('error',{sub:item.id,...liveErrorFields(await liveQueryRejection(response))}));
+          if (response.status >= 400) {
+            this.enqueue(item.id, encodeLiveFrame('error', { sub: item.id, ...liveErrorFields(await liveQueryRejection(response)) }));
             return;
           }
           await response.body?.cancel();
-          this.enqueue(item.id,encodeLiveFrame('fallback',{sub:item.id,message:'Live subscription needs its own stream',status:response.status}));
+          this.enqueue(item.id, encodeLiveFrame('fallback', {
+            sub: item.id, message: 'Live subscription needs its own stream', status: response.status,
+          }));
           return;
         }
-        slot.engine=factory(this.run);this.arm(item.id,slot);
-      }).catch(()=>{
-        Reflect.deleteProperty(request,CAPTURE);slot.terminal=true;
-        this.enqueue(item.id,encodeLiveFrame('error',{sub:item.id,message:'Live subscription failed'}));
+        slot.engine = factory(this.run);
+        this.arm(item.id, slot);
+      }).catch(() => {
+        Reflect.deleteProperty(request, CAPTURE);
+        slot.terminal = true;
+        this.enqueue(item.id, encodeLiveFrame('error', { sub: item.id, message: 'Live subscription failed' }));
       });
     }
-    response():Response {
-      const body=new ReadableStream<Uint8Array>({
-        start:controller=>{this.controller=controller;controller.enqueue(encodeLiveFrame('session',{version:1,session:this.id}));},
-        pull:async controller=>{
-          while(!this.abort.signal.aborted){
-            const first=this.queue.entries().next();
-            if(!first.done){
-              const [id,bytes]=first.value;this.queue.delete(id);this.bytes-=bytes.byteLength;
+
+    /** The session's stream: queued frames in order, and a heartbeat while it's idle. */
+    response(): Response {
+      const body = new ReadableStream<Uint8Array>({
+        start: (controller) => {
+          this.controller = controller;
+          controller.enqueue(encodeLiveFrame('session', { version: 1, session: this.id }));
+        },
+        pull: async (controller) => {
+          while (!this.abort.signal.aborted) {
+            const first = this.queue.entries().next();
+            if (!first.done) {
+              const [id, bytes] = first.value;
+              this.queue.delete(id);
+              this.bytes -= bytes.byteLength;
               controller.enqueue(bytes);
-              const slot=this.slots.get(id);
-              if(slot?.terminal)this.remove(id);else if(slot)this.arm(id,slot);
+              const slot = this.slots.get(id);
+              if (slot?.terminal) this.remove(id);
+              else if (slot) this.arm(id, slot);
               return;
             }
-            let idle=false;
-            await new Promise<void>(resolve=>{this.wake=resolve;this.timer=setTimeout(()=>{idle=true;resolve();},interval);});
-            clearTimeout(this.timer);this.wake=undefined;
-            if(idle&&!this.abort.signal.aborted){
-              if(this.slots.size===0){this.stop();controller.close();return;}
-              controller.enqueue(new TextEncoder().encode(': heartbeat\n\n'));return;
+            let idle = false;
+            await new Promise<void>((resolve) => {
+              this.wake = resolve;
+              this.timer = setTimeout(() => {
+                idle = true;
+                resolve();
+              }, interval);
+            });
+            clearTimeout(this.timer);
+            this.wake = undefined;
+            if (idle && !this.abort.signal.aborted) {
+              if (this.slots.size === 0) {
+                this.stop();
+                controller.close();
+                return;
+              }
+              controller.enqueue(new TextEncoder().encode(': heartbeat\n\n'));
+              return;
             }
           }
-          try{controller.close();}catch{}
-        },cancel:()=>this.stop(),
-      },{highWaterMark:1});
-      return new Response(body,{headers:{'content-type':'text/event-stream; charset=utf-8','cache-control':'no-cache, no-transform','x-accel-buffering':'no','x-mmd-multiplex':'1'}});
+          try {
+            controller.close();
+          } catch {
+            // Already closed.
+          }
+        },
+        cancel: () => this.stop(),
+      }, { highWaterMark: 1 });
+      return new Response(body, { headers: {
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-cache, no-transform',
+        'x-accel-buffering': 'no',
+        'x-mmd-multiplex': '1',
+      } });
     }
   }
-  return {async handle(request,platform){
-    if(request.method!=='POST')return new Response('Method Not Allowed',{status:405,headers:{allow:'POST'}});
-    const origin=request.headers.get('origin'),site=request.headers.get('sec-fetch-site');
-    if(origin!==null&&origin!==new URL(request.url).origin||site==='cross-site')return new Response('Forbidden',{status:403});
-    if(request.headers.get('x-mmd-multiplex')!=='1')return new Response('Missing live protocol',{status:400});
-    let input:Control;
-    try{input=await control(request);}catch{return new Response('Invalid live controls',{status:400});}
-    for(const item of input.subscribe){
-      let url:URL;try{url=new URL(item.url,request.url);}catch{return new Response('Invalid live URL',{status:400});}
-      if(url.origin!==new URL(request.url).origin||url.hash||url.username||url.password||!eligible(url.pathname))return new Response('Unknown live function',{status:400});
-    }
-    let session=input.session===undefined?undefined:sessions.get(input.session);
-    if(input.session!==undefined){
-      if(!session)return new Response('Live session expired',{status:409});
-      if(session.auth!==fingerprint(request))return new Response('Forbidden',{status:403});
-      if(input.revision<=session.revision)return new Response(null,{status:204});
-      if(input.revision!==session.revision+1)return new Response('Live controls out of order',{status:409});
-    }else if(input.revision!==1||input.unsubscribe.length||!input.subscribe.length)return new Response('Invalid initial subscriptions',{status:400});
-    const ids=new Set(input.subscribe.map(item=>item.id));
-    const retained=session?[...session.slots.keys()].filter(id=>!input.unsubscribe.includes(id)).length:0;
-    if(ids.size!==input.subscribe.length||[...ids].some(id=>session?.used.has(id))||retained+ids.size>MAX_SUBSCRIPTIONS||
-      (session?.used.size??0)+ids.size>MAX_CONTROLS)return new Response('Live subscription capacity exceeded',{status:429});
-    if(!session){
-      if(sessions.size>=MAX_SESSIONS)return new Response('Live session capacity exceeded',{status:429});
-      session=new Session(request,platform,input.contentType);sessions.set(session.id,session);
-      const response=session.response();for(const item of input.subscribe)session.add(item);
-      if(request.signal.aborted)session.stop();return response;
-    }
-    session.revision=input.revision;
-    for(const id of input.unsubscribe)session.remove(id);
-    for(const item of input.subscribe)session.add(item);
-    if(session.slots.size===0){session.stop();try{session.controller?.close();}catch{}}
-    return new Response(null,{status:204});
-  }};
+
+  return {
+    async handle(request, platform) {
+      if (request.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: { allow: 'POST' } });
+      const origin = request.headers.get('origin');
+      const site = request.headers.get('sec-fetch-site');
+      if ((origin !== null && origin !== new URL(request.url).origin) || site === 'cross-site') {
+        return new Response('Forbidden', { status: 403 });
+      }
+      if (request.headers.get('x-mmd-multiplex') !== '1') return new Response('Missing live protocol', { status: 400 });
+      let input: Control;
+      try {
+        input = await control(request);
+      } catch {
+        return new Response('Invalid live controls', { status: 400 });
+      }
+      // Only this origin's registered live functions.
+      for (const item of input.subscribe) {
+        let url: URL;
+        try {
+          url = new URL(item.url, request.url);
+        } catch {
+          return new Response('Invalid live URL', { status: 400 });
+        }
+        if (url.origin !== new URL(request.url).origin || url.hash || url.username || url.password || !eligible(url.pathname)) {
+          return new Response('Unknown live function', { status: 400 });
+        }
+      }
+
+      let session = input.session === undefined ? undefined : sessions.get(input.session);
+      if (input.session !== undefined) {
+        if (!session) return new Response('Live session expired', { status: 409 });
+        if (session.auth !== fingerprint(request)) return new Response('Forbidden', { status: 403 });
+        // A retried control the session already applied.
+        if (input.revision <= session.revision) return new Response(null, { status: 204 });
+        if (input.revision !== session.revision + 1) return new Response('Live controls out of order', { status: 409 });
+      } else if (input.revision !== 1 || input.unsubscribe.length || !input.subscribe.length) {
+        return new Response('Invalid initial subscriptions', { status: 400 });
+      }
+
+      const ids = new Set(input.subscribe.map((item) => item.id));
+      const retained = session ? [...session.slots.keys()].filter((id) => !input.unsubscribe.includes(id)).length : 0;
+      const overCapacity = ids.size !== input.subscribe.length || [...ids].some((id) => session?.used.has(id))
+        || retained + ids.size > MAX_SUBSCRIPTIONS || (session?.used.size ?? 0) + ids.size > MAX_CONTROLS;
+      if (overCapacity) return new Response('Live subscription capacity exceeded', { status: 429 });
+
+      if (!session) {
+        if (sessions.size >= MAX_SESSIONS) return new Response('Live session capacity exceeded', { status: 429 });
+        session = new Session(request, platform, input.contentType);
+        sessions.set(session.id, session);
+        const response = session.response();
+        for (const item of input.subscribe) session.add(item);
+        if (request.signal.aborted) session.stop();
+        return response;
+      }
+
+      session.revision = input.revision;
+      for (const id of input.unsubscribe) session.remove(id);
+      for (const item of input.subscribe) session.add(item);
+      if (session.slots.size === 0) {
+        session.stop();
+        try {
+          session.controller?.close();
+        } catch {
+          // Already closed.
+        }
+      }
+      return new Response(null, { status: 204 });
+    },
+  };
 }
