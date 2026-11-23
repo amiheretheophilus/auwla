@@ -1,10 +1,12 @@
 import type { StandardSchemaV1 } from '@memoized-dom/data';
 import {
   createDefine,
+  error,
   replyToSocket,
   serve,
   type DefinitionState,
   type DefinitionPlatform,
+  type ServerContext,
   type ServerFunctionArguments,
   type ServerFunctionResult,
   type ServerSocketEvent,
@@ -114,6 +116,23 @@ type CallbackFirstCheck = Assert<Equal<ServerFunctionArguments<typeof callbackFi
 // can't get the handler's types: TypeScript types the object top to bottom and settles them as
 // unknown at `live`. No signature changes that, so the compiler rejects that one order with a
 // message to move it (packages/compiler/src/server/functions.ts, takesUntypedArguments).
+// It happens only when the handler has an untyped parameter (its context): a handler with none
+// is typed first, wherever it sits. These stay typed, and the compiler accepts them:
+define.function({
+  live: (_context, id) => {
+    type LiveBeforeTypedHandlerCheck = Assert<Equal<typeof id, string>>;
+    return ['a', id];
+  },
+  async get(_context: ServerContext<State, Platform>, id: string) { return { id }; },
+});
+define.function({
+  live: () => ['payment'],
+  refresh: (payment) => {
+    type RefreshBeforeBareHandlerCheck = Assert<Equal<typeof payment, { state: string }>>;
+    return '5s';
+  },
+  async get() { return { state: 'pending' }; },
+});
 const refreshed = define.function({
   async get(_context, reference: string) { return { reference }; },
   live: (_context, reference) => ['tracking', reference],
@@ -122,6 +141,28 @@ const refreshed = define.function({
 type RefreshArgumentsCheck = Assert<Equal<ServerFunctionArguments<typeof refreshed>, [reference: string]>>;
 // @ts-expect-error refresh takes a duration in seconds or minutes.
 define.function({ async get() { return 1; }, live: () => ['a'], refresh: 30 });
+type PaymentState = 'pending' | 'succeeded' | 'failed';
+define.function({
+  async get(_context, reference: string) { return { reference, state: 'pending' as PaymentState }; },
+  live: (_context, reference) => ['payment', reference],
+  refresh: (payment) => {
+    type RefreshResultCheck = Assert<Equal<typeof payment, { reference: string; state: PaymentState }>>;
+    return payment.state === 'pending' ? '5s' : false;
+  },
+});
+define.function({
+  async get(_context, id: string) {
+    if (id === '') return error({ message: 'Unavailable' }, { status: 503 });
+    return { count: 1 };
+  },
+  live: (_context, id) => ['count', id],
+  refresh: (last) => {
+    type RefreshSkipsErrorCheck = Assert<Equal<typeof last, { count: number }>>;
+    return '1m';
+  },
+});
+// @ts-expect-error A refresh callback returns a duration or false.
+define.function({ async get() { return 1; }, live: () => ['a'], refresh: () => 5 });
 const streamed = define.function({ async *post(_context, prompt: string) { yield prompt; yield prompt + '!'; return undefined; } });
 type StreamResultCheck = Assert<Equal<ServerFunctionResult<typeof streamed>, string>>;
 const validatedLive = define.function({

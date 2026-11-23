@@ -183,6 +183,7 @@ function definedFunction(local: string, statement: Node, init: Node, fail: Fail)
   let updates = false;
   let refresh = false;
   let untypedKeyBeforeHandler: Extract<Node, { type: 'Property' }> | null = null;
+  let untypedResultBeforeHandler: Extract<Node, { type: 'Property' }> | null = null;
   for (const property of (definition as Extract<Node, { type: 'ObjectExpression' }>).properties) {
     if (!is.Property(property) || property.computed) {
       fail('define.function() fields must be explicit; spreads and computed keys hide HTTP method ownership', property);
@@ -196,6 +197,7 @@ function definedFunction(local: string, statement: Node, init: Node, fail: Fail)
     if (name === 'middleware') continue;
     if (name === 'refresh') {
       refresh = true;
+      if (method === null && takesUntypedResult(field.value)) untypedResultBeforeHandler = field;
       continue;
     }
     if (name === 'live' || name === 'updates') {
@@ -219,13 +221,22 @@ function definedFunction(local: string, statement: Node, init: Node, fail: Fail)
     return fail(HANDLER_REQUIRED, statement);
   }
   // An `input` schema gives the arguments their types wherever it is written.
-  if (untypedKeyBeforeHandler !== null && !schemaInput) {
+  if (untypedKeyBeforeHandler !== null && !schemaInput && typedLate(handler)) {
     const key = propertyName(untypedKeyBeforeHandler.key);
     const verb = method.toLowerCase();
     fail(
       `move '${key}' after '${verb}': TypeScript types the definition from top to bottom, so a '${key}' ` +
         `written first can't see the argument types '${verb}' declares and gets them as unknown`,
       untypedKeyBeforeHandler,
+    );
+  }
+  // A refresh callback reads the handler's result, which no `input` schema provides.
+  if (untypedResultBeforeHandler !== null && typedLate(handler)) {
+    const verb = method.toLowerCase();
+    fail(
+      `move 'refresh' after '${verb}': TypeScript types the definition from top to bottom, so a 'refresh' ` +
+        `written first can't see the result '${verb}' returns and gets it as unknown`,
+      untypedResultBeforeHandler,
     );
   }
   if (method === 'WEBSOCKET') {
@@ -248,10 +259,29 @@ function definedFunction(local: string, statement: Node, init: Node, fail: Fail)
 function takesUntypedArguments(value: Node): boolean {
   const callback = unwrapType(value);
   if (!is.FunctionExpression(callback) && !is.ArrowFunctionExpression(callback)) return false;
-  return callback.params.slice(1).some(parameter => {
-    const target = is.AssignmentPattern(parameter) ? parameter.left : parameter;
-    return !('typeAnnotation' in target) || target.typeAnnotation == null;
-  });
+  return callback.params.slice(1).some(untyped);
+}
+
+/** Whether an inline `refresh` callback leaves the result it receives without a type. */
+function takesUntypedResult(value: Node): boolean {
+  const callback = unwrapType(value);
+  if (!is.FunctionExpression(callback) && !is.ArrowFunctionExpression(callback)) return false;
+  const parameter = callback.params[0];
+  return parameter !== undefined && untyped(parameter);
+}
+
+/**
+ * Whether TypeScript has to wait to type this handler: it has a parameter with no type, which
+ * in practice is its context. A handler like `async get() {}` is typed first, wherever it sits,
+ * so a key or a refresh written before it still sees its types.
+ */
+function typedLate(handler: Handler): boolean {
+  return handler.params.some(untyped);
+}
+
+function untyped(parameter: Node): boolean {
+  const target = is.AssignmentPattern(parameter) ? parameter.left : parameter;
+  return !('typeAnnotation' in target) || target.typeAnnotation == null;
 }
 
 /** Each runtime export: its exported name, its local name, and where it is written. */

@@ -123,6 +123,10 @@ describe('server functions', () => {
     ['export const a = define.function({ live: true, async post() {} });', 'live requires an ordinary GET'],
     ["export const a = define.function({ async get() {}, refresh: '30s' });", 'refresh needs a live GET'],
     ["export const a = define.function({ async websocket() {}, live: () => ['a'], refresh: '30s' });", 'refresh needs a live GET'],
+    ["export const a = define.function({ live: () => ['a'], refresh: (last) => '5s', async get(_c) {} });",
+      "move 'refresh' after 'get'"],
+    ["export const a = define.function({ input: s, live: (c, input) => ['a'], refresh: (last) => '5s', async get(_c, input) {} });",
+      "move 'refresh' after 'get'"],
     ["export const a = define.function({ live: (c, id) => ['a', id], async get(_c, id: string) {} });",
       "move 'live' after 'get'"],
     ["export const a = define.function({ updates: (c, id) => ['a', id], async post(_c, id: string) {} });",
@@ -143,6 +147,12 @@ describe('server functions', () => {
       "export const a = define.function({ live: keyOf, async get(_c, id: string) {} });",
       "export const a = define.function({ async get(_c, id: string) {}, live: (c, id) => ['a', id] });",
       "export const a = define.function({ async get() {}, live: () => ['a'], refresh: '30s' });",
+      "export const a = define.function({ async get() {}, live: () => ['a'], refresh: (last) => last.done ? false : '5s' });",
+      "export const a = define.function({ refresh: () => '5s', live: () => ['a'], async get() {} });",
+      "export const a = define.function({ refresh: '30s', live: () => ['a'], async get() {} });",
+      // A handler with no untyped parameter is typed first, wherever it sits.
+      "export const a = define.function({ live: () => ['a'], refresh: (last) => '5s', async get() {} });",
+      "export const a = define.function({ live: (c, id) => ['a', id], async get(c: Context, id: string) {} });",
     ]) {
       expect(() => analyzeServerFunctions('server/functions/good.ts', source)).not.toThrow();
     }

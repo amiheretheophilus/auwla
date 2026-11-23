@@ -11,7 +11,7 @@ import {
   type RoutedServerContext,
 } from '@memoized-dom/router/internal';
 import type { StandardSchemaV1 } from '@memoized-dom/data';
-import { generatorResponse, liveHub, liveQueryRejection, liveResponse, type LiveKey, type LiveStamp } from './live';
+import { generatorResponse, liveHub, liveQueryRejection, liveResponse, type LiveKey, type LiveRefreshPlan, type LiveStamp } from './live';
 import { isServerPage } from './page-definition';
 import { captureLiveResponse, createLiveSessions, createLiveSubscription, LIVE_SESSION_PATH } from './live-session';
 import { socketUpgrade } from './websocket/upgrade';
@@ -167,8 +167,8 @@ export interface ServerFunctionRouteDefinition<
   readonly input?: StandardSchemaV1;
   readonly live?: (context: ServerContext<TLocals, TPlatform, TServices>, ...args: unknown[]) => LiveKey;
   readonly updates?: (context: ServerContext<TLocals, TPlatform, TServices>, ...args: unknown[]) => LiveKey;
-  /** How often, in milliseconds, a live read is checked while someone reads it. */
-  readonly refresh?: number;
+  /** How often a live read is checked while someone reads it: milliseconds, or a callback choosing from each result. */
+  readonly refresh?: LiveRefreshPlan;
   readonly handler: (
     context: ServerContext<TLocals, TPlatform, TServices>,
     ...args: unknown[]

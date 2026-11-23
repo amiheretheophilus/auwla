@@ -21,6 +21,22 @@ export async function reportStreamError(error: unknown, request: Request, report
   }
 }
 
+/** How often to check a live read whose data changes where the server isn't told: `'30s'`, `'5m'`. */
+export type LiveRefresh = `${number}s` | `${number}m`;
+
+/** A function's `refresh`: fixed milliseconds, or the author's callback choosing from each result. */
+export type LiveRefreshPlan = number | ((result: unknown) => unknown);
+
+/** `'30s'` → 30000. At least a second, so a typo can't turn into a request storm. */
+export function liveRefreshMilliseconds(value: unknown): number {
+  const match = typeof value === 'string' ? /^(\d+(?:\.\d+)?)(s|m)$/.exec(value) : null;
+  const milliseconds = match === null ? NaN : Number(match[1]) * (match[2] === 'm' ? 60_000 : 1000);
+  if (!(milliseconds >= 1000)) {
+    throw new TypeError(`memo-dom: refresh takes a duration like '30s' or '5m', at least '1s' (got ${JSON.stringify(value)})`);
+  }
+  return milliseconds;
+}
+
 // The native host and generated routes can load separate module instances, so a brand on
 // the error, not `instanceof`, recognizes a rejection.
 const REJECTION = Symbol.for('memoized-dom:live-query-rejection');
@@ -168,8 +184,8 @@ export function createLiveSubscription(
   request: Request,
   query: (signal: AbortSignal) => Promise<unknown>,
   onError?: StreamErrorReporter,
-  /** The function's `refresh`, in milliseconds: how often to check a source that can't say it changed. */
-  refresh?: number,
+  /** The function's `refresh`: how often to check a source that can't say it changed. */
+  refresh?: LiveRefreshPlan,
 ): LiveSubscription {
   const abort = new AbortController();
   let dirty = true;
@@ -180,7 +196,29 @@ export function createLiveSubscription(
   // only when the result differs from the last one it was sent, so nothing re-renders for nothing.
   let recheck = false;
   let delivered: string | undefined;
-  const checks = refresh === undefined ? undefined : setInterval(() => { recheck = true; wake?.(); }, refresh);
+  // The next check is scheduled after each result, never on a fixed clock, so checks can't
+  // overlap and a callback can change the pace, or pause it with `false`.
+  let checkTimer: ReturnType<typeof setTimeout> | undefined;
+  let interval: number | undefined;
+  const armCheck = () => {
+    clearTimeout(checkTimer); checkTimer = undefined;
+    if (interval === undefined || abort.signal.aborted) return;
+    checkTimer = setTimeout(() => { checkTimer = undefined; recheck = true; wake?.(); }, interval);
+  };
+  /**
+   * Schedule the next check from a result the reader has: the fixed interval, or what the
+   * author's callback chooses from that result. A callback that throws, or returns something
+   * that isn't a duration or `false`, fails the read like any other server error.
+   */
+  const scheduleAfter = (value: unknown) => {
+    if (refresh === undefined) return;
+    if (typeof refresh === 'number') interval = refresh;
+    else {
+      const choice = refresh(value);
+      interval = choice === false ? undefined : liveRefreshMilliseconds(choice);
+    }
+    armCheck();
+  };
   const releaseRender = () => {
     const previous = rendering; rendering = undefined;
     previous?.updates.cancel();
@@ -189,7 +227,7 @@ export function createLiveSubscription(
   const stop = () => {
     if (abort.signal.aborted) return;
     abort.abort();
-    clearInterval(checks);
+    clearTimeout(checkTimer);
     disconnect();
     request.signal.removeEventListener('abort', stop);
     releaseRender();
@@ -206,12 +244,16 @@ export function createLiveSubscription(
     let value: unknown;
     try { value = await query(abort.signal); }
     catch (error) {
-      if (!abort.signal.aborted && liveRejection(error) === undefined) void reportStreamError(error, request, onError);
+      if (abort.signal.aborted) return undefined;
+      if (liveRejection(error) === undefined) void reportStreamError(error, request, onError);
+      armCheck(); // Same pace: only a result the reader has can change it.
       return undefined;
     }
     if (isServerPageUpdates(value)) { value.cancel(); dirty = true; return undefined; }
+    // A real change arrived meanwhile: its full read runs next and schedules from its result.
     if (abort.signal.aborted || dirty || stamp.revision !== hub.stamp(key).revision) return undefined;
     const json = JSON.stringify(value);
+    scheduleAfter(value);
     if (json === delivered) return undefined;
     delivered = json;
     return { value, stamp };
@@ -243,10 +285,16 @@ export function createLiveSubscription(
               });
               continue;
             }
-            if (isServerPageUpdates(value)) rendering = { updates: value, iterator: value[Symbol.asyncIterator](), stamp };
-            else {
+            if (isServerPageUpdates(value)) {
+              rendering = { updates: value, iterator: value[Symbol.asyncIterator](), stamp };
+              // A page has no data result for a callback to read; only a fixed interval applies.
+              if (typeof refresh === 'number') { interval = refresh; armCheck(); }
+            } else {
               committed = true;
-              if (refresh !== undefined) delivered = JSON.stringify(value);
+              if (refresh !== undefined) {
+                delivered = JSON.stringify(value);
+                scheduleAfter(value);
+              }
               return deliver(value, stamp);
             }
           }
@@ -289,7 +337,7 @@ export function createLiveSubscription(
 export function liveResponse(hub: LiveHub, key: string, request: Request,
   query: (signal: AbortSignal) => Promise<unknown>, onError?: StreamErrorReporter,
   heartbeatInterval?: number,
-  refresh?: number,
+  refresh?: LiveRefreshPlan,
 ): Response {
   const interval = resolveLiveHeartbeatInterval(heartbeatInterval);
   const subscription=createLiveSubscription(hub,key,request,query,onError,refresh);

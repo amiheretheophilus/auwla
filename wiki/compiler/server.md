@@ -37,11 +37,16 @@ call each endpoint over HTTP, while the server build routes each endpoint to its
   left untyped, is an error asking to move it: TypeScript types an object literal's functions top
   to bottom, so that argument settles as `unknown` before the handler's types exist, and no
   signature in `define.ts` can change that (it already uses `NoInfer`). A typed argument, a
-  context-only key, or an `input` schema works in any order. `refresh: '30s'` is accepted only
-  beside `live` on a GET (an error otherwise); the registry passes the function's parsed
-  `refresh` (milliseconds) to its route, and the server's live engine (`packages/server/src/live.ts`,
-  `createLiveSubscription`) reruns the read on that interval while it has readers, sending a
-  value only when its JSON changed and keeping the last value when a check fails.
+  context-only key, or an `input` schema works in any order. The error fires only when the
+  handler has an untyped parameter (its context): a handler with none, like `async get() {}`,
+  is typed first wherever it sits (`typedLate`). An inline `refresh` callback with an untyped
+  result parameter before such a handler is the same error; an `input` schema doesn't help it,
+  since its type is the handler's result. `refresh` is accepted only beside `live` on a GET (an
+  error otherwise); the registry passes the function's `refresh` (parsed milliseconds, or the
+  author's callback) to its route. The server's live engine (`packages/server/src/live.ts`,
+  `createLiveSubscription`) schedules each check after a result, from the fixed interval or
+  the callback's answer (`false` pauses until another result), sends a value only when its
+  JSON changed, and keeps the last value and pace when a check fails.
 - `serverFunctionClient(module)` (`server/generate.ts`) is the facade: the same names, calling
   `$fetch` (or a streaming or page source) with the parameters in the query or a JSON body.
 - `serverFunctionDeclarations(modules, resolve)` types the flat `#server-functions` barrel through

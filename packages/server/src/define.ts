@@ -1,5 +1,14 @@
 import type { StandardSchemaV1 } from '@memoized-dom/data';
-import { liveHub, type LiveHub, type LiveKey } from './live';
+import {
+  liveHub,
+  liveRefreshMilliseconds,
+  type LiveHub,
+  type LiveKey,
+  type LiveRefresh,
+  type LiveRefreshPlan,
+} from './live';
+
+export type { LiveRefresh } from './live';
 import type { ServerSocketSession } from './websocket/definition';
 import type {
   RegisteredServerServices,
@@ -32,21 +41,8 @@ export interface DefinedServerFunction<
   readonly input?: StandardSchemaV1;
   readonly live?: (context: ServerContext<TState, TPlatform, TServices>, ...args: THandlerArguments) => LiveKey;
   readonly updates?: (context: ServerContext<TState, TPlatform, TServices>, ...args: THandlerArguments) => LiveKey;
-  /** `refresh`, in milliseconds. */
-  readonly refresh?: number;
-}
-
-/** How often to check a live read whose data changes where the server isn't told: `'30s'`, `'5m'`. */
-export type LiveRefresh = `${number}s` | `${number}m`;
-
-/** `'30s'` → 30000. At least a second, so a typo can't turn into a request storm. */
-function refreshMilliseconds(value: unknown): number {
-  const match = typeof value === 'string' ? /^(\d+(?:\.\d+)?)(s|m)$/.exec(value) : null;
-  const milliseconds = match === null ? NaN : Number(match[1]) * (match[2] === 'm' ? 60_000 : 1000);
-  if (!(milliseconds >= 1000)) {
-    throw new TypeError(`memo-dom: refresh takes a duration like '30s' or '5m', at least '1s' (got ${JSON.stringify(value)})`);
-  }
-  return milliseconds;
+  /** `refresh`: milliseconds, or the author's callback choosing from each result. */
+  readonly refresh?: LiveRefreshPlan;
 }
 
 export type ServerFunctionArguments<TFunction> =
@@ -92,7 +88,13 @@ type ServerFunctionHandler<
   ...args: TArguments
 ) => Promise<TResult> | AsyncGenerator<TResult, unknown, unknown>;
 
-type FunctionInvalidation<TState extends object, TPlatform, TServices extends object, TArguments extends readonly unknown[]> = {
+type FunctionInvalidation<
+  TState extends object,
+  TPlatform,
+  TServices extends object,
+  TArguments extends readonly unknown[],
+  TResult = unknown,
+> = {
   /** Observe a hierarchical key. Receives context, then the handler's server arguments in positional order. */
   readonly live?: (context: ServerContext<TState, TPlatform, TServices>, ...args: { [K in keyof TArguments]: NoInfer<TArguments[K]> }) => LiveKey;
   /** Invalidate a key and related active queries after success; arguments follow the handler's positional order. */
@@ -100,9 +102,10 @@ type FunctionInvalidation<TState extends object, TPlatform, TServices extends ob
   /**
    * With `live`: while someone reads it, rerun the read this often on the server, and send
    * readers the result only when it changed. For data another system changes without telling
-   * this server.
+   * this server. A callback chooses from each reader's last result instead: a duration, or
+   * `false` to stop checking until another result arrives (an `updates` key, `define.invalidate`).
    */
-  readonly refresh?: LiveRefresh;
+  readonly refresh?: LiveRefresh | ((result: NoInfer<Exclude<TResult, Response>>) => LiveRefresh | false);
 };
 
 type ServerFunctionVerb = 'get' | 'post' | 'put' | 'patch' | 'delete';
@@ -122,7 +125,7 @@ export type ServerFunctionDescriptor<
 > = {
   readonly middleware?: readonly ServerMiddleware<TState, TPlatform, TServices>[];
   readonly input?: undefined;
-} & FunctionInvalidation<TState, TPlatform, TServices, TArguments> & OneFunctionMethod<ServerFunctionHandler<
+} & FunctionInvalidation<TState, TPlatform, TServices, TArguments, TResult> & OneFunctionMethod<ServerFunctionHandler<
   TState,
   TPlatform,
   TServices,
@@ -159,7 +162,7 @@ export type ServerFunctionInputDescriptor<
 > = {
   readonly middleware?: readonly ServerMiddleware<TState, TPlatform, TServices>[];
   readonly input: TSchema;
-} & FunctionInvalidation<TState, TPlatform, TServices, readonly [input: SchemaOutput<TSchema>]> & OneFunctionMethod<ServerFunctionHandler<
+} & FunctionInvalidation<TState, TPlatform, TServices, readonly [input: SchemaOutput<TSchema>], TResult> & OneFunctionMethod<ServerFunctionHandler<
   TState,
   TPlatform,
   TServices,
@@ -347,7 +350,11 @@ function createFunctionDefinition<
       ...(descriptor.input === undefined ? {} : { input: descriptor.input }),
       ...(descriptor.live === undefined ? {} : { live: descriptor.live }),
       ...(descriptor.updates === undefined ? {} : { updates: descriptor.updates }),
-      ...(descriptor.refresh === undefined ? {} : { refresh: refreshMilliseconds(descriptor.refresh) }),
+      ...(descriptor.refresh === undefined ? {} : {
+        refresh: typeof descriptor.refresh === 'function'
+          ? descriptor.refresh as (result: unknown) => unknown
+          : liveRefreshMilliseconds(descriptor.refresh),
+      }),
     }) as unknown as DefinedServerFunction<
       TArguments,
       TResult,
