@@ -46,6 +46,13 @@ and remove it once the owning wiki records it as done.
 - [ ] **Class shorthand** `<div.card.active>`, merged with `class`; `<Card.featured>` passes
   `class`. Spec first. [DX-53](wiki2/decisions.md)
 - [ ] **Open question**: `{a}` as shorthand for `a={a}`.
+- [ ] **Declarations in a `for`/`if` child block** (`for (const s of sections) { const current = …;
+  <a …/> }`). Outside the core profile ([grammar.md](wiki2/spec/grammar.md), G-FOR; deferred in
+  [semantics.md](wiki2/spec/semantics.md)), and a porting app hit it at once (2026-11-23). Decide
+  what such a `const` means (a per-iteration derived value that updates like a component's?), spec
+  it with fixtures, no IIFE. Until then the diagnostic is poor: generic `HOST` "outside the initial
+  JSX+ core profile" (`markup/children.ts`); it should name the rule and the fixes (compute before
+  the loop, or move the row into a component).
 - [ ] Remaining wiki2 slices: event expressions (P5-EVENT), bindings (P6-BIND), a full app through
   edit/build/SSR/adoption/disposal (P7-APP), server functions and SSR in `.auwla` (P4-MODULES),
   broader recovery and flow (P2-HARDEN, P4-FLOW). [wiki2 plan](wiki2/plan.md)
