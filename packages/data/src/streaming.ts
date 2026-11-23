@@ -5,7 +5,7 @@ import { enableRequestEncoding } from './request-encoding';
 import { fetchStoreForRuntime } from './runtime-core';
 import { RequestError, isAbortError, liveFrameError } from './errors';
 import { liveStamp, updateStamps, type LiveStamp } from './live-protocol';
-import { applyLivePatch, type LiveJsonValue } from './live-patch';
+import { LiveBaseline } from './live-baseline';
 import { decodeResponse } from './request';
 import { validateValue } from './schema';
 import { responseStreamDecoder } from './response-decoder';
@@ -15,9 +15,8 @@ import { liveDiagnosticsEnabled, liveDiagnosticId, liveDiagnosticName, observeLi
 import type { CoreDataRuntime } from './runtime-core';
 import type { FetchEnvironment } from './resource';
 import type { FetchOptions, ResolvedValue } from './types';
-
-class StreamProtocolError extends Error {}
-class LivePatchBaselineError extends Error {}
+// One definition for both transports: `LiveBaseline` throws these, and both catch them.
+import { LivePatchBaselineError, StreamProtocolError } from './stream-frames';
 
 function delay(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -120,14 +119,7 @@ function transport(environment: FetchEnvironment, runtime: CoreDataRuntime): Non
       let data: string[] = [];
       let terminal = false;
       // Connection-local and never exposed: optimistic callbacks mutate delivered copies.
-      let baseline: LiveJsonValue | undefined;
-      let sequence: number | undefined;
-      const frameSequence = (input: unknown): number => {
-        if (typeof input !== 'number' || !Number.isSafeInteger(input) || input < 1) {
-          throw new StreamProtocolError('Invalid live patch sequence');
-        }
-        return input;
-      };
+      const baseline = new LiveBaseline();
       const deliver = async (input: unknown, stamp?: LiveStamp) => {
         const decoded = descriptor.schema ? await validateValue(descriptor.schema,input) : input;
         if (!signal.aborted) value(decoded,stamp);
@@ -147,30 +139,24 @@ function transport(environment: FetchEnvironment, runtime: CoreDataRuntime): Non
             const stamp = liveStamp(frame.stamp);
             if (descriptor.stream === 'live' && stamp === undefined) throw new StreamProtocolError('Missing live query cursor');
             if (descriptor.stream === 'live' && Object.hasOwn(frame, 'seq')) {
-              const nextSequence = frameSequence(frame.seq);
-              if (sequence !== undefined && nextSequence === sequence + 1) baselineRecoveries = 0;
-              sequence = nextSequence;
-              diagnosticSequence=sequence;diagnostic('frame-received',{stamp,sequence});
-              baseline = frame.value as LiveJsonValue;
-              await deliver(structuredClone(baseline), stamp);
+              if (baseline.replace(frame.value, frame.seq)) baselineRecoveries = 0;
+              diagnosticSequence = baseline.sequence;
+              diagnostic('frame-received', { stamp, sequence: baseline.sequence });
+              await deliver(baseline.current(), stamp);
             } else {
               // Older servers still deliver complete values without patch negotiation.
-              baseline = undefined; sequence = undefined;
+              baseline.reset();
               await deliver(frame.value, stamp);
             }
           } else if (event === 'patch') {
             if (descriptor.stream !== 'live') throw new StreamProtocolError('Patches are only supported for live queries');
             const stamp = liveStamp(frame.stamp);
             if (stamp === undefined) throw new StreamProtocolError('Missing live query cursor');
-            const base = frameSequence(frame.base), seq = frameSequence(frame.seq);
-            if (seq !== base + 1) throw new StreamProtocolError('Invalid live patch sequence');
-            if (baseline === undefined || sequence !== base) throw new LivePatchBaselineError('Live patch baseline mismatch');
-            try { baseline = applyLivePatch(baseline, frame.patch); }
-            catch { throw new StreamProtocolError('Invalid live patch operations'); }
-            sequence = seq;
-            diagnosticSequence=sequence;diagnostic('patch-received',{stamp,sequence});
+            baseline.patch(frame.base, frame.seq, frame.patch);
+            diagnosticSequence = baseline.sequence;
+            diagnostic('patch-received', { stamp, sequence: baseline.sequence });
             baselineRecoveries = 0;
-            await deliver(structuredClone(baseline), stamp);
+            await deliver(baseline.current(), stamp);
           } else if (event === 'done') {
             if (!seen) throw new StreamProtocolError('Streaming function did not yield an initial value');
             delivery.updates(updateStamps(JSON.stringify(frame.updates ?? [])));
