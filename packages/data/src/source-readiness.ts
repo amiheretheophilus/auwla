@@ -264,6 +264,16 @@ export function sourceStatusInput(value: unknown): undefined {
   return undefined;
 }
 
+/**
+ * A value handed on whole (`board = result`, a `$forms` action's `return result`): a request
+ * moves as it is, still loading or failed, so it never makes the code wait. A value computed
+ * from a request that isn't ready yet is a waiting marker, and that still waits: `seen = title`
+ * runs once `title` exists.
+ */
+export function sourceHandedInput(value: unknown): WaitingSourceInputs | undefined {
+  return value instanceof WaitingSourceInputs ? value : sourceStatusInput(value);
+}
+
 export function waitingSourceInputs(inputs: readonly unknown[]): WaitingSourceInputs | undefined {
   const sources = new Set<ResolvedValue<unknown>>();
   let blocked = false;

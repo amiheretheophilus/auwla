@@ -413,6 +413,24 @@ which every transition moves, so a site reading through it is evaluated again; t
 the resource itself, since `observeResolvedValue` follows sources only. The case is `a resource from a
 runtime the author holds shows its data when it arrives`.
 
+### A value handed on whole
+
+Some positions move a value on as JavaScript does instead of reading it (`handsOn`,
+`features/sources/classify.ts`): `board = result`, as `const board = result` already did; `return
+result` from a `$forms` action, whose request `$forms` tracks for `form.pending`; and
+`optimistic({ source: [notes, summary] })`, whose requests it protects. Before, each read the
+request's payload: the action returned a waiting marker, so `form.pending` never turned on and `board`
+kept its old value; `optimistic` got the notes array and threw.
+
+Such a read is neither a payload read nor a status read. Its input is `sourceHandedInput`
+(`packages/data`, `source-readiness.ts`): a request passes through as it is, loading or failed, while a
+waiting marker, a value computed from a request that isn't ready, still waits. So `seen = title`
+inside an effect, with `title` computed from a loading user, waits for `title` as before. The reference
+has the same rule written independently (`passesOn` and `$passed`, `tests/reference`), and its own
+small `$forms`. The case is `a $forms action that returns its request through a local name is pending
+until it settles`; the browser cases are vite's `server-pages`, `live-streaming` and
+`live-notes-effects`.
+
 ## Where to add things
 
 - A new kind of source: one recognizer in `classify.ts`. Readiness follows from

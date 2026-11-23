@@ -540,6 +540,56 @@ function decodeResponse(response: Response): Promise<unknown> {
   );
 }
 
+/**
+ * An input moved on whole (`board = result`): a source passes as it is, loading or failed, so it
+ * never waits; a `Waiting` value, something computed from a source that hasn't loaded, still does.
+ */
+export function $passed(value: unknown): unknown {
+  return value instanceof Waiting ? value : $sourceState(value);
+}
+
+/**
+ * `$forms`, as far as the cases use it: `submit(fields)` runs the action; the form is pending
+ * while what the action returned is loading (a source, or a promise), and then holds its result
+ * or its error. The reference renders after every step, so each getter answers from the latest
+ * submission at the time it's read.
+ */
+export function $forms(action: (fields: FormData) => unknown) {
+  let latest: { output: unknown; settled: boolean; value?: unknown; error?: unknown } | null = null;
+
+  const outcome = () => {
+    const output = latest?.output;
+    if (output instanceof Source) {
+      return {
+        pending: output.status === 'pending' || output.status === 'idle',
+        value: output.data,
+        error: output.status === 'error' ? output.error : undefined,
+      };
+    }
+    return { pending: latest !== null && !latest.settled, value: latest?.value, error: latest?.error };
+  };
+
+  return {
+    get pending() { return outcome().pending; },
+    get errors() {
+      const error = outcome().error;
+      return error === undefined ? [] : [{ kind: 'submit', message: error instanceof Error ? error.message : String(error) }];
+    },
+    get hasResult() { const current = outcome(); return latest !== null && !current.pending && current.error === undefined; },
+    get result() { return outcome().value; },
+    submit(fields: FormData) {
+      const submission: NonNullable<typeof latest> = { output: undefined, settled: false };
+      latest = submission;
+      submission.output = action(fields);
+      if (submission.output instanceof Source) return;
+      Promise.resolve(submission.output).then(
+        (value) => { submission.settled = true; submission.value = value; },
+        (error) => { submission.settled = true; submission.error = error; },
+      );
+    },
+  };
+}
+
 export function $track(source: Source) {
   if (!(source instanceof Source)) throw new Error('reference: $track expects a source');
   return {

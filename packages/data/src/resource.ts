@@ -722,8 +722,21 @@ export function resourceController<T>(
   return controller as ResourceController<T>;
 }
 
+/**
+ * The keys a mutation's response said it changed (`x-mmd-updates`), kept for the promise a non-GET
+ * call returns (`transparent-actions.ts`). Its request is disposed once it settles, so this is
+ * where a caller holding only the promise, such as `optimistic`, still finds its confirmation.
+ */
+const actionUpdates = new WeakMap<object, readonly LiveStamp[]>();
+
+export function recordActionUpdates(result: object, updates: readonly LiveStamp[]): void {
+  actionUpdates.set(result, updates);
+}
+
+/** A request's confirmed updates, or those recorded for an action's promise. */
 export function fetchResourceUpdates(resource: unknown): readonly LiveStamp[] {
-  return typeof resource === 'object' && resource !== null ? controllers.get(resource)?.updates ?? [] : [];
+  if (typeof resource !== 'object' || resource === null) return [];
+  return controllers.get(resource)?.updates ?? actionUpdates.get(resource) ?? [];
 }
 
 export function fetchResourceIsFiniteStream(resource: unknown): boolean {

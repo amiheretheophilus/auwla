@@ -10,6 +10,7 @@ export {
   sourceSwitchInputs,
   selectSourceBranch,
   sourceStatusInput,
+  sourceHandedInput,
   sourceBindingInput,
   takeSourceBinding,
   settleSourceStep,

@@ -1,5 +1,5 @@
 /** The colorless action surface awaits the request the existing engine dispatched. */
-import { disposeFetchResource, resourceController } from './resource';
+import { disposeFetchResource, fetchResourceUpdates, recordActionUpdates, resourceController } from './resource';
 import type { FetchResource, ResolvedValue } from './types';
 
 export function transparentFetchResult<T>(resource: FetchResource<T>): ResolvedValue<T> | Promise<T> {
@@ -13,8 +13,10 @@ export function transparentFetchResult<T>(resource: FetchResource<T>): ResolvedV
   // original request, including decoding, validation and cancellation.
   const request = controller.entry?.request ?? Promise.resolve(controller.snapshot.data);
 
-  const result = request.then(
+  const result: Promise<T> = request.then(
     (value) => {
+      // The request is disposed next; its confirmation stays with the promise the caller holds.
+      recordActionUpdates(result, fetchResourceUpdates(resource));
       disposeFetchResource(resource);
 
       return value as T;

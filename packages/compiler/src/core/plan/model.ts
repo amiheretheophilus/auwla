@@ -500,6 +500,8 @@ export interface SourceInputPlan {
   readonly reads: readonly {
     readonly value: Node;
     readonly status: boolean;
+    /** Handed on whole (`classify.ts`, `handsOn`): waits for a waiting marker only, never a request. */
+    readonly handed?: boolean;
     readonly path: readonly string[];
   }[];
   readonly branches: readonly SourceBranchInputs[];

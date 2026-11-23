@@ -504,14 +504,15 @@ function planInputs(
     // is a plain props object, and so can an alias of props or a helper's
     // parameter given props (`reach.ts`). Data descriptors avoid speculative getters.
     const needsPath = path.length > 0 && (isParameter(binding) || (reach !== null && reach.contains(binding)));
-    const signature = JSON.stringify([!use.payload, needsPath ? path : []]);
+    const handed = use.handed === true;
+    const signature = JSON.stringify([!use.payload, handed, needsPath ? path : []]);
     const uses = seen.get(binding) ?? new Set<string>();
 
     if (uses.has(signature)) {
       continue;
     }
 
-    reads.push({ value: reference.node, status: !use.payload, path: needsPath ? path : [] });
+    reads.push({ value: reference.node, status: !use.payload, ...(handed ? { handed } : {}), path: needsPath ? path : [] });
     uses.add(signature);
     seen.set(binding, uses);
   }

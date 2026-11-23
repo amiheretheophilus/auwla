@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'bun:test';
-import { createDataRuntime, runWithDataRuntime, type FetchResource } from '@memoized-dom/data';
+import { $fetch, createDataRuntime, runWithDataRuntime, type FetchResource } from '@memoized-dom/data';
 import { createStreamingSource } from '@memoized-dom/data/internal';
 import { optimistic } from '@memoized-dom/utils';
 import { waitFor } from '../../../test-support/helpers';
@@ -98,6 +98,31 @@ it('accepts a Note mutation result for a Note[] live source and retains its ackn
     expect(logs.warn).not.toHaveBeenCalled();
     data.emit([{ id: 'saved', text: 'Saved' }, { id: 'external', text: 'External' }], 2);
     await waitFor(() => expect(data.rows.data).toHaveLength(2));
+  } finally { data.runtime.clear(); logs.restore(); }
+});
+
+// A server function's POST is the public `$fetch`, which returns a promise, not the request. Its
+// response's confirmation (`x-mmd-updates`) must still release the protection, with no warning.
+it('keeps the confirmation of a mutation that returns a promise', async () => {
+  const data = await fixture(), logs = diagnostics();
+  try {
+    const submit = optimistic({
+      source: data.notes,
+      action: () => runWithDataRuntime(data.runtime, () => $fetch<Note>('/save', { method: 'POST' })) as unknown as Promise<Note>,
+      apply(_input: string, id) {
+        data.rows.mutate(rows => { rows!.push({ id, text: 'Optimistic' }); });
+        return () => {};
+      },
+    });
+    const result = submit('note');
+    expect(result).toBeInstanceOf(Promise);
+    data.emit([{ id: 'old', text: 'Old snapshot' }], 1);
+    data.succeed();
+    await result;
+    // Held until the confirmed revision arrives, then applied.
+    data.emit([{ id: 'saved', text: 'Saved' }], 2);
+    await waitFor(() => expect(data.rows.data).toEqual([{ id: 'saved', text: 'Saved' }]));
+    expect(logs.warn).not.toHaveBeenCalled();
   } finally { data.runtime.clear(); logs.restore(); }
 });
 

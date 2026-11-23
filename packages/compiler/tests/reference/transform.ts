@@ -107,7 +107,7 @@ const GUARDABLE_STATEMENTS = new Set<string>([
 
 const RUNTIME_EXPORTS = [
   '$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect', '$ownedEffect', '$moduleMemo',
-  '$when', '$value', '$chain', '$waiting', '$sourceState', '$branch', '$switch', '$path', '$ready',
+  '$when', '$value', '$chain', '$waiting', '$sourceState', '$passed', '$branch', '$switch', '$path', '$ready',
   '$captureRead', '$closureCell', '$closureRead', '$traced', '$moduleBuilder', '$reassigned', '$ownedCleanup',
   '$privateTarget', '$setup', '$spread', '$untracked',
   '$installRoutes', '$routeContext', '$routeJoin', '$routeCall', '$routeIdentity', '$routeHref', '$routeCurrent', '$followedRoute',

@@ -8,7 +8,6 @@ import {
   runWithDataRuntime,
   RequestError,
   type FetchResource,
-  type ResolvedValue,
   type StandardSchemaV1,
 } from '@memoized-dom/data';
 import { optimistic, type OptimisticCallOptions } from '@memoized-dom/utils';
@@ -99,7 +98,9 @@ describe('optimistic', () => {
       apply: () => () => {},
       reconcile(saved) { expectTypeOf(saved.savedId).toEqualTypeOf<string>(); },
     });
-    expectTypeOf(submit).returns.toEqualTypeOf<ResolvedValue<{ savedId: string }>>();
+    // A non-GET `$fetch` returns a promise (data `TransparentFetchFunction`), and `optimistic`
+    // returns its action's result unchanged.
+    expectTypeOf(submit).returns.toEqualTypeOf<Promise<{ savedId: string }>>();
     expectTypeOf<Parameters<typeof submit>[1]>()
       .toEqualTypeOf<OptimisticCallOptions | undefined>();
     const form = $forms({ schema, action: submit });

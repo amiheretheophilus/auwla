@@ -20,7 +20,7 @@ import { buildRoutePath, createRouteMatcher, getActiveRouteRuntime, matchRoutePa
 import { prepareInitialRoute, readRoutedPreparation, registerRoutedPreparation } from '@memoized-dom/router/internal';
 import { classValue, setStyleValue } from '../../../runtime/src/dom-values';
 export {
-  $branch, $chain, $fetch, $path, $read, $switch, $track, $value, $waiting, $when, $sourceState, Group,
+  $branch, $chain, $fetch, $forms, $passed, $path, $read, $switch, $track, $value, $waiting, $when, $sourceState, Group,
 } from './sources';
 
 // ---------------------------------------------------------------------------

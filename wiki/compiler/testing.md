@@ -341,16 +341,16 @@ checks before retention checks as well as in isolation when changing this fixtur
    Passing on the single plugin: `vite-adapter`, `next-plugin`, `cli`, `native-host`,
    `native-package*`, `next-hmr-browser`, `hmr-browser`, `dev-recovery`, `fullstack-ssr-isolation`
    and JSX+'s Vite tests. Open, each a behavior to fix next:
-   - `optimistic({ source })` gets the payload, not the live source (`live-streaming`,
-     `live-notes-effects`, which also still run `examples/fieldnotes`, against rule 16);
-   - `$forms`: `form.pending` stays false while the action's request waits (`server-pages`, the
-     browser half; its server half passes in development and production);
-   - a server page streamed in the document never shows its markup (`server-pages` stream mode;
-     `progressive-server-pages` is fixed, `server.md`, "A page streamed in the document");
    - after a component edit, a Worker's Hono backend meets a second copy of `hono` (`cloudflare-host`,
      the dev case; the three built Workers pass);
    - the dev error overlay after a broken server import, and recovery after a server-only throw
      (`dev-recovery-browser`).
+
+   Fixed since (2026-11-23): `$forms` pending while its action's request waits, and
+   `optimistic({ source })` protecting the live requests themselves (`server-pages`,
+   `live-streaming`, `live-notes-effects`; values handed on whole, `sources.md`). The two live tests
+   now build their own app (`vite/tests/support/notes-app.ts`) instead of running
+   `examples/fieldnotes`. `server-pages` stream mode passes since the stream-regions fix.
 
    Fixed since (2026-11-22): hydrated facade sources (`fullstack-browser`), a test change by the
    documented API: a POST server function returns a promise, tracked as `$read(postVote(id))`

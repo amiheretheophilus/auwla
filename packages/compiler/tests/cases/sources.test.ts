@@ -2145,6 +2145,42 @@ behaves('a POST server function in an effect runs when the effect runs', {
   },
 });
 
+// A `$forms` action hands `$forms` the request it starts, through a local name too: `$forms`
+// tracks that request (`form.pending`), and `user = next` moves the request itself, as
+// `user = getUser(2)` does. Before, both read the request's value, which wasn't there yet: the
+// action returned a waiting marker, `form.pending` never turned on, and `user` kept the old value.
+behaves('a $forms action that returns its request through a local name is pending until it settles', {
+  modules: { './server-functions.ts': users },
+  source: `
+    import { Group } from '@memoized-dom/data';
+    import { getUser } from './server-functions';
+    export function App() {
+      let user = getUser(1);
+      const form = $forms(() => {
+        const next = getUser(2);
+        user = next;
+        return next;
+      });
+      return (
+        <main>
+          <Group pending={() => <i>loading</i>}><p>{user.name}</p></Group>
+          <span>{form.pending ? 'saving' : 'ready'}</span>
+          <button onClick={() => form.submit(new FormData())}>save</button>
+        </main>
+      );
+    }`,
+  steps: [
+    { respond: '/_fn/users/getUser?id=1', value: { name: 'Ada' } },
+    { click: 'button' },
+    { respond: '/_fn/users/getUser?id=2', value: { name: 'Lin' } },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('span')?.textContent).toBe(['ready', 'ready', 'saving', 'ready'][observation]);
+    if (observation === 1) expect(container.querySelector('p')?.textContent).toBe('Ada');
+    if (observation === 3) expect(container.querySelector('p')?.textContent).toBe('Lin');
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Found by the generated source programs (tests/generator/sources.test.ts).
 

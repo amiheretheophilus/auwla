@@ -626,6 +626,7 @@ function sourceInputs(
         });
       }
 
+      if (read.handed) return expression('$$data.sourceHandedInput($$value)', { data, value });
       return read.status ? expression('$$data.sourceStatusInput($$value)', { data, value }) : value;
     });
 

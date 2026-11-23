@@ -161,7 +161,9 @@ export function optimistic<TPayload, TResult extends OperationResult>(
             }
             releaseGroup();
           }
-        } finally { releaseSource(source); }
+          // The action's own request holds its confirmation; a promise's is kept for the
+          // promise, not for the read made from it here.
+        } finally { releaseSource(existingSource ? source : result); }
       });
       if (!finished) stopError = tracker.onError(error => {
         if (finished) return;

@@ -13,10 +13,14 @@ type DataApi = '$fetch' | '$read' | '$track';
 export interface SourceReadUse {
   readonly handle: boolean;
   readonly payload: boolean;
+  /** Handed on whole (`handsOn`): a request moves as it is; only a waiting marker waits. */
+  readonly handed?: boolean;
 }
 
 const PAYLOAD_READ: SourceReadUse = { handle: false, payload: true };
 const STATUS_READ: SourceReadUse = { handle: true, payload: false };
+/** The value moves on whole (`handsOn`): its payload isn't read here, and a request doesn't wait. */
+const HANDED_ON: SourceReadUse = { handle: true, payload: false, handed: true };
 
 interface ImportedValue {
   readonly specifier: string;
@@ -129,6 +133,78 @@ export function dataExport(module: Module, value: Node): string | null {
   return imported.name;
 }
 
+/**
+ * A function in the action position of `$forms`: its first argument, `$forms(save)`, or the
+ * `action` of its options, `$forms({ schema, action: save })`.
+ */
+export function formAction(module: Module, position: Node, parent: Node | null): boolean {
+  if (is.CallExpression(parent) && parent.arguments[0] === position) {
+    return dataExport(module, parent.callee) === '$forms';
+  }
+
+  if (!is.Property(parent) || parent.value !== position || parent.computed
+    || !is.Identifier(parent.key) || parent.key.name !== 'action') {
+    return false;
+  }
+
+  const options = module.parentOf(parent);
+  const call = options === null ? null : module.parentOf(options);
+  return is.ObjectExpression(options) && is.CallExpression(call) && call.arguments[0] === options
+    && dataExport(module, call.callee) === '$forms';
+}
+
+/**
+ * Whether `value` hands its whole value on, as JavaScript does, rather than reading it:
+ *
+ * - `board = result`: the same value under another name, as `const board = result` is
+ *   (`flow-plan.ts`); the request stays a request, still pending or failing on its own.
+ * - `return result` from a `$forms` action: `$forms` takes what the action returns and tracks the
+ *   request itself (`form.pending`, `form.errors`). Its payload isn't ready when the action
+ *   returns, so reading it there would hand `$forms` a waiting marker instead.
+ * - `optimistic({ source: [notes, summary] })`: the requests it protects (`optimisticSource`).
+ */
+function handsOn(module: Module, value: Node, parent: Node): boolean {
+  if (is.AssignmentExpression(parent)) {
+    return parent.operator === '=' && parent.right === value && is.Identifier(parent.left);
+  }
+
+  if (is.ReturnStatement(parent) && parent.argument === value) {
+    const owner = runnerOf(module, parent);
+    return owner !== null && is.Function(owner) && formAction(module, owner, module.parentOf(owner));
+  }
+
+  if (is.ArrowFunctionExpression(parent) && parent.body === value) {
+    return formAction(module, parent, module.parentOf(parent));
+  }
+
+  return optimisticSource(module, value, parent);
+}
+
+/**
+ * `optimistic({ source: notes })`, or `source: [notes, summary]`: the live requests to protect
+ * while the change is pending (`@memoized-dom/utils`). Their payload would protect nothing.
+ */
+function optimisticSource(module: Module, value: Node, parent: Node): boolean {
+  let property: Node | null = parent;
+  if (is.ArrayExpression(parent)) {
+    if (!parent.elements.includes(value as never)) return false;
+    property = module.parentOf(parent);
+    value = parent;
+  }
+
+  if (!is.Property(property) || property.value !== value || property.computed
+    || !is.Identifier(property.key) || property.key.name !== 'source') {
+    return false;
+  }
+
+  const options = module.parentOf(property);
+  const call = options === null ? null : module.parentOf(options);
+  if (!is.ObjectExpression(options) || !is.CallExpression(call) || call.arguments[0] !== options) return false;
+
+  const callee = importedValue(module, call.callee);
+  return callee?.specifier === '@memoized-dom/utils' && callee.name === 'optimistic';
+}
+
 /** Unknown request methods may be actions. Do not label their promises sources. */
 export function fetchMethod(call: Extract<Node, { type: 'CallExpression' }>): string | null {
   const options = call.arguments[1];
@@ -211,6 +287,10 @@ export class SourceQueries {
       if (isTransparentWrapper(parent)) {
         value = parent;
         continue;
+      }
+
+      if (handsOn(module, value, parent)) {
+        return HANDED_ON;
       }
 
       if (!is.CallExpression(parent)) {

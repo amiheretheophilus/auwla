@@ -52,6 +52,8 @@ export interface SourceUses {
   readonly raw: Set<Node>;
   /** Only status uses may bypass the payload guard. Mixed uses still wait. */
   readonly status: Set<Node>;
+  /** Values moved on whole: they wait for a `Waiting` value, never for a source. */
+  readonly passed: Set<Node>;
 }
 
 /** Independent parameter-flow proof for the reference, before any AST edits. */
@@ -67,6 +69,8 @@ export function sourceUses(module: Module): SourceUses {
   interface Use {
     raw: boolean;
     payload: boolean;
+    /** Moved on whole (`passesOn`): a source passes as it is; only a `Waiting` value waits. */
+    passed?: boolean;
   }
 
   const ordinary: Use = { raw: false, payload: true };
@@ -88,6 +92,12 @@ export function sourceUses(module: Module): SourceUses {
         value = parent;
 
         continue;
+      }
+
+      // The whole value moves on, as in JavaScript: `board = result` is the same request under
+      // another name, and what a `$forms` action returns is the request `$forms` tracks.
+      if (passesOn(owner, value, parent)) {
+        return { raw: true, payload: false, passed: true };
       }
 
       if (!is.CallExpression(parent) || !is.Identifier(parent.callee)) {
@@ -155,7 +165,7 @@ export function sourceUses(module: Module): SourceUses {
     return ordinary;
   };
 
-  const result: SourceUses = { raw: new Set(direct), status: new Set() };
+  const result: SourceUses = { raw: new Set(direct), status: new Set(), passed: new Set() };
 
   for (const reference of module.references) {
     if (reference.inTypePosition || reference.isWrite) {
@@ -178,12 +188,38 @@ export function sourceUses(module: Module): SourceUses {
       result.raw.add(reference.node);
     }
 
-    if (!use.payload) {
+    if (use.passed) {
+      result.passed.add(reference.node);
+    } else if (!use.payload) {
       result.status.add(reference.node);
     }
   }
 
   return result;
+}
+
+/** `name = value`, `return value` from a `$forms` action, or that action's arrow body. */
+function passesOn(module: Module, value: Node, parent: Node): boolean {
+  if (is.AssignmentExpression(parent)) {
+    return parent.operator === '=' && parent.right === value && is.Identifier(parent.left);
+  }
+
+  let action: Node | null = null;
+  if (is.ReturnStatement(parent) && parent.argument === value) {
+    action = [...module.ancestors(parent)].find((node) => is.Function(node) && node !== parent) ?? null;
+  } else if (is.ArrowFunctionExpression(parent) && parent.body === value) {
+    action = parent;
+  }
+  if (action === null) return false;
+
+  // The first argument of `$forms(...)`, or the `action` of its options.
+  const holder = module.parentOf(action);
+  if (is.CallExpression(holder) && holder.arguments[0] === action) return isDataCall(module, holder, '$forms');
+  if (!is.Property(holder) || holder.value !== action || !is.Identifier(holder.key) || holder.key.name !== 'action') return false;
+  const options = module.parentOf(holder);
+  const call = options === null ? null : module.parentOf(options);
+  return is.ObjectExpression(options) && is.CallExpression(call) && call.arguments[0] === options
+    && isDataCall(module, call, '$forms');
 }
 
 /**
@@ -197,7 +233,10 @@ export function statusInput(
 ): Expression {
   const uses = reads.referencesInside(roots, undefined, skip).get(binding) ?? [];
   const statusOnly = uses.length > 0 && uses.every((use) => rawUses.status.has(use.node));
-  return statusOnly ? runtimeCall('$sourceState', [value]) : value;
+  if (statusOnly) return runtimeCall('$sourceState', [value]);
+  // Moved on whole, or only read for status: a source never makes it wait, a `Waiting` value does.
+  const passedOnly = uses.length > 0 && uses.every((use) => rawUses.passed.has(use.node) || rawUses.status.has(use.node));
+  return passedOnly ? runtimeCall('$passed', [value]) : value;
 }
 
 /** Handlers, refs and `Group` policies are functions: they do not wait. Other attributes do. */
@@ -1029,7 +1068,7 @@ export function prepareModuleReads(
 
 /** Imports of the public source APIs point at the reference's own implementations. */
 export function rewriteDataImports(module: Module, runtimeUrl: string): void {
-  const supported = new Set(['$fetch', '$read', '$track', 'Group']);
+  const supported = new Set(['$fetch', '$read', '$track', '$forms', 'Group']);
 
   module.ast.body = module.ast.body.flatMap((statement) => {
     if (!is.ImportDeclaration(statement) || statement.source.value !== '@memoized-dom/data') return [statement];

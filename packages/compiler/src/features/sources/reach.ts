@@ -29,7 +29,7 @@ import { isStylesheet } from '../../core/resolve/imports';
 import { frameworkPackage, importOf, isFrameworkMount } from '../../core/resolve/exports';
 import { functionValue, type FunctionNode } from '../../core/resolve/functions';
 import { lifecycleKind } from '../../core/resolve/ambient';
-import { dataExport } from './classify';
+import { dataExport, formAction } from './classify';
 
 type JsxElement = Extract<Node, { type: 'JSXElement' }>;
 type CallNode = Extract<Node, { type: 'CallExpression' | 'NewExpression' }>;
@@ -1224,26 +1224,6 @@ function evaluatesNothingUnknown(module: Module): boolean {
   } });
 
   return nothing;
-}
-
-/**
- * A function in the action position of `$forms`: its first argument, `$forms(save)`, or the
- * `action` of its options, `$forms({ schema, action: save })`.
- */
-function formAction(module: Module, position: Node, parent: Node | null): boolean {
-  if (is.CallExpression(parent) && parent.arguments[0] === position) {
-    return dataExport(module, parent.callee) === '$forms';
-  }
-
-  if (!is.Property(parent) || parent.value !== position || parent.computed
-    || !is.Identifier(parent.key) || parent.key.name !== 'action') {
-    return false;
-  }
-
-  const options = module.parentOf(parent);
-  const call = options === null ? null : module.parentOf(options);
-  return is.ObjectExpression(options) && is.CallExpression(call) && call.arguments[0] === options
-    && dataExport(module, call.callee) === '$forms';
 }
 
 /** Framework packages: their exports are known and create sources only through `@memoized-dom/data`. */
