@@ -52,6 +52,8 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
   let entry: string | undefined;
   let revision = 0;
   let failedBackend = false;
+  /** The server program's last build error, until it builds again (`serverBuildFailed`). */
+  let buildFailure: Error | undefined;
   let workerHost = false;
   const launcher: Plugin = {
     name: 'memoized-dom:native-launcher', enforce: 'post',
@@ -71,6 +73,7 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
       if (!api?.serverEntry) throw new Error('memoized-dom: native development requires memoizedDom({ clientEntry, serverEntry })');
       api.nativeDevelopment = true;
       api.invalidateBackend = () => { revision++; };
+      api.serverBuildFailed = (error) => { buildFailure = error; };
       entry = api.serverEntry;
     },
     hotUpdate(update) {
@@ -215,6 +218,11 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
     } catch (error) { await release(); throw error; }
   };
   const developmentFetch = async (request: Request, platform?: unknown): Promise<Response | undefined> => {
+    // While the server program doesn't build, a new page shows why. Pages already open keep
+    // working against the last backend that built: their requests are not documents.
+    if (buildFailure !== undefined && isDocumentRequest(request)) {
+      return recoveryDocument(vite, `http://127.0.0.1:${port}`, buildFailure);
+    }
     try { return await dispatch(request, platform); }
     catch (error) {
       if (!isDocumentRequest(request)) throw error;

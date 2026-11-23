@@ -340,9 +340,7 @@ checks before retention checks as well as in isolation when changing this fixtur
    the old compile error for it is gone. The runtime trace test is skipped with devtools (FINALIZE).
    Passing on the single plugin: `vite-adapter`, `next-plugin`, `cli`, `native-host`,
    `native-package*`, `next-hmr-browser`, `hmr-browser`, `dev-recovery`, `fullstack-ssr-isolation`
-   and JSX+'s Vite tests. Open, each a behavior to fix next:
-   - the dev error overlay after a broken server import, and recovery after a server-only throw
-     (`dev-recovery-browser`).
+   and JSX+'s Vite tests. Nothing on this list is open (2026-11-23).
 
    Fixed since (2026-11-23): `$forms` pending while its action's request waits, and
    `optimistic({ source })` protecting the live requests themselves (`server-pages`,
@@ -352,7 +350,13 @@ checks before retention checks as well as in isolation when changing this fixtur
    Worker's second `hono` after a component edit (`cloudflare-host`, dev): the browser environment
    resolved the server's `hono` to its own pre-bundled copy under `.vite/deps`, which the Vite host
    took for a project file and compiled into the server program; anything resolved into Vite's
-   `cacheDir` is now a package (`vite/src/host.ts`, `host.test.ts`).
+   `cacheDir` is now a package (`vite/src/host.ts`, `host.test.ts`). `dev-recovery-browser`: a
+   failed server build was heard only in the terminal. Now the open page gets Vite's overlay
+   while its requests keep reaching the last working backend, a new page load gets the error page
+   (`serverBuildFailed`, decided once per update in `plugin.ts`, served by `dev.ts`), and the fix
+   reloads the page; a deleted file and modules the build no longer reaches are invalidated too,
+   so an importer can't still load the deleted file's last transform. Its component syntax case
+   timed out once under load and passed on each rerun; watch it.
 
    Fixed since (2026-11-22): hydrated facade sources (`fullstack-browser`), a test change by the
    documented API: a POST server function returns a promise, tracked as `$read(postVote(id))`

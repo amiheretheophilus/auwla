@@ -135,7 +135,9 @@ it.skipIf(!chrome)('repairs an ordinary component syntax error even when the ori
     await page.waitForSelector('vite-error-overlay', { timeout: 15_000 });
     expect(await page.$eval('h1', element => element.textContent)).toBe('Recovery');
     await writeFile(resolve(root, 'src/App.tsx'), app);
-    await page.waitForFunction(() => !document.querySelector('vite-error-overlay') && document.querySelector('[data-board]')?.textContent === 'Before', { timeout: 20_000 });
+    try {
+      await page.waitForFunction(() => !document.querySelector('vite-error-overlay') && document.querySelector('[data-board]')?.textContent === 'Before', { timeout: 20_000 });
+    } catch (error) { throw new Error(String(error) + '\n' + await page.content()); }
     expect(await page.$eval('h1', element => element.textContent)).toBe('Recovery');
   } finally { await closeBrowser(browser); await dev?.close(); await rm(root, { recursive: true, force: true }); }
 }, 90_000);

@@ -439,7 +439,13 @@ export function memoizedDom(options: MemoizedDomViteOptions): Plugin {
       const key = `${update.timestamp}\0${path}`;
       if (lastUpdate?.key !== key) {
         resolver = environmentResolver(this.environment);
-        const result = application.update([path]).then(async (done) => ({ ...done, build: await afterBuild(done.build) }));
+        const result = application.update([path]).then(async (done) => {
+          // Once, before either environment reacts: a page that reloads after a fix must not
+          // meet the error the server build just cleared.
+          const server = done.build.server;
+          api.serverBuildFailed?.(server?.ok === false ? viteError(server.error, fileOf(server.error.path)) : undefined);
+          return { ...done, build: await afterBuild(done.build) };
+        });
         lastUpdate = { key, result };
         building = result.then((done) => done.build);
       }
@@ -447,12 +453,30 @@ export function memoizedDom(options: MemoizedDomViteOptions): Plugin {
       const environment = this.environment.name;
       const program = programOf(result.build, environment);
       if (program === undefined) return [];
+      const serverProgram = result.build.server;
       if (!program.ok) {
         failedEnvironments.add(environment);
         throw viteError(program.error, fileOf(program.error.path));
       }
+      // A server-only file broke (a server function, a page it renders): the browser's own build
+      // is fine, but the overlay is where the developer looks. The open page keeps working; the fix
+      // reloads it, through the recovery below.
+      if (sideOf(environment) === 'client' && serverProgram?.ok === false) {
+        failedEnvironments.add(environment);
+        const failure = viteError(serverProgram.error, fileOf(serverProgram.error.path));
+        this.environment.hot.send({ type: 'error', err: {
+          message: failure.message, stack: '', id: failure.id, plugin: 'memoized-dom',
+          ...(failure.loc === undefined ? {} : { loc: failure.loc }),
+        } });
+        return [];
+      }
 
-      const changed = new Set((sideOf(environment) === 'server' ? result.server?.changed : result.client.changed) ?? []);
+      const side = sideOf(environment) === 'server' ? result.server : result.client;
+      const changed = new Set(side?.changed ?? []);
+      // A module the build no longer reaches, or a deleted file, must not keep its last transform:
+      // the next import of an importer would still find it there and succeed.
+      for (const module of side?.removed ?? []) changed.add(module);
+      if (update.type === 'delete') changed.add(path);
       // The fix can compile to the output before the error, which still must clear Vite's overlay.
       if (failedEnvironments.delete(environment)) {
         const styleOnly = program.modules.includes(path) && program.output[path] === undefined;

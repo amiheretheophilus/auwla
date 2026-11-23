@@ -26,6 +26,12 @@ export interface FullstackPluginApi {
   nativeDevelopment: boolean;
   /** Retire native server modules before a compiler-owned full reload. */
   invalidateBackend?: () => void;
+  /**
+   * The server program failed to build after an edit (an error), or builds again (undefined). The
+   * native dev host answers new page loads with the error until then; requests from pages already
+   * open keep reaching the last working backend.
+   */
+  serverBuildFailed?: (error: Error | undefined) => void;
   cloudflareAssetsBinding?: string;
   /** Build now and write the declarations the build made (`memoized-dom types`). */
   writeDeclarations?: () => Promise<void>;
