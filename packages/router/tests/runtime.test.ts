@@ -692,8 +692,11 @@ describe('route runtime', () => {
     expect(runtime.route.pathname).toBe('/docs/compiler');
     expect(runtime.route.state).toEqual({ via: 'navigation-api' });
     expect(intercept).toHaveBeenCalledTimes(1);
+    // Focus stays where the user left it, a sidebar link that is still on the page included,
+    // instead of the browser's reset to the top of the document after every navigation.
     expect(intercept).toHaveBeenCalledWith(expect.objectContaining({
       scroll: 'manual',
+      focusReset: 'manual',
     }));
     expect(historyPush).not.toHaveBeenCalled();
 
@@ -823,7 +826,7 @@ describe('route runtime', () => {
       hashChange: true,
     });
     expect(runtime.route.hash).toBe('#section');
-    expect(intercept).toHaveBeenCalledWith(expect.objectContaining({ scroll: 'manual' }));
+    expect(intercept).toHaveBeenCalledWith(expect.objectContaining({ scroll: 'manual', focusReset: 'manual' }));
     runtime.dispose();
   });
 

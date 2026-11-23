@@ -41,6 +41,15 @@ import type {
   RelativeNavigateArguments,
 } from './types';
 
+/**
+ * What an intercepted navigation leaves to the app. Scroll: the router's coordinator restores it.
+ * Focus: the browser's default moves it to the top of the document after every navigation, so a
+ * keyboard user who followed a link in a sidebar that stays on the page had to tab back from the
+ * start. Left alone, focus stays on that link, as it does without the Navigation API; a link the
+ * navigation removed leaves focus on the document, as before.
+ */
+const APPLICATION_OWNED = { scroll: 'manual', focusReset: 'manual' } as const;
+
 const FALLBACK_ORIGIN = 'http://memoized-dom.local';
 const FALLBACK_URL = new URL(FALLBACK_ORIGIN);
 
@@ -75,6 +84,7 @@ export interface NavigationEventLike extends Event {
   intercept(options?: {
     readonly handler?: () => Promise<void> | void;
     readonly scroll?: 'after-transition' | 'manual';
+    readonly focusReset?: 'after-transition' | 'manual';
   }): void;
 }
 
@@ -1023,7 +1033,7 @@ export function createRouteRuntime(
           }
         });
         navigationEvent.intercept({
-          scroll: 'manual',
+          ...APPLICATION_OWNED,
           async handler() {
             if (traversal.status === 'preparing') await traversal.finished;
           },
@@ -1036,7 +1046,7 @@ export function createRouteRuntime(
       setLocation(destination, type, destinationState);
       const result = finishNavigation(prepared.navigation, prepared.redirects);
       navigationEvent.intercept({
-        scroll: 'manual',
+        ...APPLICATION_OWNED,
         async handler() {
           restoreCommittedNavigationScroll(navigationEvent, destination, type, pendingRenderReady);
           if (result.status === 'preparing') await result.finished;
@@ -1049,7 +1059,7 @@ export function createRouteRuntime(
     setLocation(destination, type, destinationState);
     const ready = pendingRenderReady;
     navigationEvent.intercept({
-      scroll: 'manual',
+      ...APPLICATION_OWNED,
       async handler() {
         restoreCommittedNavigationScroll(navigationEvent, destination, type, ready);
         // Route subscribers render from the synchronous location update.
