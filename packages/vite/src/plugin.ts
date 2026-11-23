@@ -258,7 +258,7 @@ export function memoizedDom(options: MemoizedDomViteOptions): Plugin {
             runtime,
           },
         }),
-        host: viteHost(resolved.root, () => resolver, languages),
+        host: viteHost(resolved.root, () => resolver, languages, resolved.cacheDir),
       });
     },
 

@@ -14,7 +14,13 @@ export type ViteResolver = (specifier: string, importer: string) => Promise<stri
  * `resolver` is read at each resolution: the hook that started a build or an update supplies
  * one, since Vite resolves through a plugin context or an environment.
  */
-export function viteHost(root: string, resolver: () => ViteResolver | null, languages?: readonly SourceLanguage[]): ProjectHost {
+export function viteHost(
+  root: string,
+  resolver: () => ViteResolver | null,
+  languages?: readonly SourceLanguage[],
+  /** Vite's cache folder (`cacheDir`): what resolves into it is a pre-bundled package. */
+  cacheDir?: string,
+): ProjectHost {
   const files = fileSystemHost(root);
   return {
     ...files,
@@ -27,15 +33,29 @@ export function viteHost(root: string, resolver: () => ViteResolver | null, lang
       const resolve = resolver();
       if (resolve === null) return undefined;
       const id = await resolve(specifier, join(root, importer));
-      return id === null ? false : compiledPath(root, id, languages);
+      return id === null ? false : compiledPath(root, id, languages, cacheDir);
     },
   };
 }
 
-/** The project path of a resolved id the project compiles, or false for a package or a virtual module. */
-function compiledPath(root: string, id: string, languages: readonly SourceLanguage[] | undefined): string | false {
+/**
+ * The project path of a resolved id the project compiles, or false for a package or a virtual
+ * module. Vite's pre-bundled dependencies (`.vite/deps/hono.js`) live inside the project but are
+ * packages: compiled as project modules, they made a second copy of the package beside the one
+ * the other environment loads, and a Worker's Hono met objects from the other copy.
+ */
+function compiledPath(
+  root: string,
+  id: string,
+  languages: readonly SourceLanguage[] | undefined,
+  cacheDir: string | undefined,
+): string | false {
   const file = longPath(id.replace(/[?#].*$/, ''));
   if (!isAbsolute(file) || file.includes('node_modules')) return false;
+  if (cacheDir !== undefined) {
+    const cached = relative(longPath(cacheDir), file);
+    if (!cached.startsWith('..') && !isAbsolute(cached)) return false;
+  }
   const inside = relative(root, file);
   if (inside.startsWith('..') || isAbsolute(inside)) return false;
   const path = projectPath(root, file);

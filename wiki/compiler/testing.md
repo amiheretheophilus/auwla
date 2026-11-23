@@ -341,8 +341,6 @@ checks before retention checks as well as in isolation when changing this fixtur
    Passing on the single plugin: `vite-adapter`, `next-plugin`, `cli`, `native-host`,
    `native-package*`, `next-hmr-browser`, `hmr-browser`, `dev-recovery`, `fullstack-ssr-isolation`
    and JSX+'s Vite tests. Open, each a behavior to fix next:
-   - after a component edit, a Worker's Hono backend meets a second copy of `hono` (`cloudflare-host`,
-     the dev case; the three built Workers pass);
    - the dev error overlay after a broken server import, and recovery after a server-only throw
      (`dev-recovery-browser`).
 
@@ -350,7 +348,11 @@ checks before retention checks as well as in isolation when changing this fixtur
    `optimistic({ source })` protecting the live requests themselves (`server-pages`,
    `live-streaming`, `live-notes-effects`; values handed on whole, `sources.md`). The two live tests
    now build their own app (`vite/tests/support/notes-app.ts`) instead of running
-   `examples/fieldnotes`. `server-pages` stream mode passes since the stream-regions fix.
+   `examples/fieldnotes`. `server-pages` stream mode passes since the stream-regions fix. The
+   Worker's second `hono` after a component edit (`cloudflare-host`, dev): the browser environment
+   resolved the server's `hono` to its own pre-bundled copy under `.vite/deps`, which the Vite host
+   took for a project file and compiled into the server program; anything resolved into Vite's
+   `cacheDir` is now a package (`vite/src/host.ts`, `host.test.ts`).
 
    Fixed since (2026-11-22): hydrated facade sources (`fullstack-browser`), a test change by the
    documented API: a POST server function returns a promise, tracked as `$read(postVote(id))`
