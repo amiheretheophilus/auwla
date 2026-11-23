@@ -46,5 +46,3 @@ must initialize a declaration (`const saved = $snapshot(state.user)`).
 Unbound `effect` and `cleanup` calls are rejected. Use `$effect` and `$cleanup`.
 Explicitly bound names remain ordinary JavaScript; they do not become lifecycle
 intrinsics.
-
-Next: [18 — Authentication](./18-authentication.md)

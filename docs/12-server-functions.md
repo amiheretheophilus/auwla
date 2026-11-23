@@ -342,68 +342,9 @@ independent operations such as inserting separate notes. Each request retains
 its own operation ID, and `lastVote` is still that request's `Promise`.
 
 Refetching after every mutation would waste a round trip for data you
-already have. When the write changes data that *other* components or other
-tabs read (an unread badge in the layout, a list on another page), declare it
-on the server instead; see the next section.
-
-## Keeping other readers in sync
-
-A mutation called from one component often changes data another component
-shows: marking a notification read on the notifications page should also
-update the unread badge in the sidebar. Don't pass a `refresh` callback around
-or call `refresh()` on every source you can think of. Say on the server which
-reads a write affects:
-
-```ts
-// server/functions/notifications.ts
-export const getNotifications = define.function({
-  async get({ state, services }, page: number) {
-    return services.notifications.page(state.session.userId, page);
-  },
-  live: ({ state }) => ['notifications', state.session.userId],
-});
-
-export const markRead = define.function({
-  async post({ state, services }, id: string) {
-    return services.notifications.markRead(state.session.userId, id);
-  },
-  updates: ({ state }) => ['notifications', state.session.userId],
-});
-```
-
-```tsx
-// Anywhere in the app: the sidebar badge and the notifications page both
-// call getNotifications(...). After markRead succeeds, both show the change.
-const notices = getNotifications(1);
-const unread = notices.items.filter(item => !item.read).length;
-```
-
-- `live` on a GET names what that read depends on. The browser keeps the read
-  open (one shared connection per page), and the server reruns it when a
-  matching key is invalidated.
-- `updates` on a mutation names what it changes. After it succeeds, the server
-  reruns every open read with a matching key and streams the new values. The
-  mutation still returns its own result to its caller.
-- Keys are arrays matched by whole segments and by prefix: invalidating
-  `['notifications', 'u1']` reruns that user's reads and any read of
-  `['notifications']`, never `['notifications', 'u2']`. Put the user in the key
-  so one user's write does not rerun everyone's read. The key is not an access
-  check; the handler still reads only what the viewer may see.
-- A change made outside these functions (a webhook, a background job) calls
-  `define.invalidate(key)` after it commits.
-
-Choose by who needs the new data:
-
-| The write changes… | Use |
-|---|---|
-| data this component holds, and the mutation returns it | reconcile with the result (above), optionally with `optimistic()` |
-| data other components, pages or tabs read | `updates` on the mutation, `live` on the reads |
-| a value you can't compute and nobody else reads (a one-off total) | `$track(source).refresh()` |
-
-Invalidation is held by each server instance; across several instances it
-needs an adapter that is [under discussion](./live-adapters-discussion.md).
-Keys, hierarchy and the security model in full:
-[live queries](./live-streaming-design.md).
+already have. `refresh()` is for the rarer case — a write that changes
+state owned by a *different* source (a count, an aggregate) whose inputs
+you can't reconcile locally.
 
 ## Pending and errors for a mutation
 

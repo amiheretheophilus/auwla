@@ -230,32 +230,6 @@ chosen content. Initial request errors still follow the surrounding error policy
 
 Using `request.refreshing` instead of `request.pending` shows the label only
 during a refresh; before the first payload, that expression renders empty.
-
-### Secondary data: a fallback instead of waiting
-
-Reading a source's payload waits for it: the reading site shows its `Group`'s
-pending UI until the data arrives. That is right for a page's main content,
-but not for a layout's notification badge, the signed-in user's name in a menu,
-or a country list behind a select. For data like that, test the status first
-and give a fallback. The payload is read only once it is there, so nothing
-waits:
-
-```tsx
-const notices = getNotifications(1);
-const unread = $track(notices).status === 'success'
-  ? notices.items.filter(item => !item.read).length
-  : 0;
-
-const viewer = getViewer();
-const name = $track(viewer).status === 'success' ? viewer.firstName : '';
-```
-
-This works anywhere an expression does: in markup, in a derived `const`, as a
-prop. The value follows the source, so `unread` updates when the source does.
-
-Use a `Group` instead when the UI cannot be drawn without the data. A fallback
-of `0` or `''` is a guess, and a page full of guesses flickers into place; a
-`Group` shows one deliberate loading state for the whole region.
 The same rules apply when an ordinary local or compiled-package helper computes
 the request-state boolean. Helpers are not recognized by their names, and no new
 annotation or runtime API is required. These are JSX render-read rules, not a
