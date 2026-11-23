@@ -181,6 +181,7 @@ function definedFunction(local: string, statement: Node, init: Node, fail: Fail)
   let schemaInput = false;
   let live = false;
   let updates = false;
+  let untypedKeyBeforeHandler: Extract<Node, { type: 'Property' }> | null = null;
   for (const property of (definition as Extract<Node, { type: 'ObjectExpression' }>).properties) {
     if (!is.Property(property) || property.computed) {
       fail('define.function() fields must be explicit; spreads and computed keys hide HTTP method ownership', property);
@@ -195,6 +196,9 @@ function definedFunction(local: string, statement: Node, init: Node, fail: Fail)
     if (name === 'live' || name === 'updates') {
       if (name === 'live') live = true;
       else updates = true;
+      if (method === null && untypedKeyBeforeHandler === null && takesUntypedArguments(field.value)) {
+        untypedKeyBeforeHandler = field;
+      }
       continue;
     }
     if (name === null || !METHODS.has(name)) fail(`unsupported define.function() field '${name ?? 'unknown'}'`, field);
@@ -209,6 +213,16 @@ function definedFunction(local: string, statement: Node, init: Node, fail: Fail)
   if (method === null || handler === null) {
     return fail(HANDLER_REQUIRED, statement);
   }
+  // An `input` schema gives the arguments their types wherever it is written.
+  if (untypedKeyBeforeHandler !== null && !schemaInput) {
+    const key = propertyName(untypedKeyBeforeHandler.key);
+    const verb = method.toLowerCase();
+    fail(
+      `move '${key}' after '${verb}': TypeScript types the definition from top to bottom, so a '${key}' ` +
+        `written first can't see the argument types '${verb}' declares and gets them as unknown`,
+      untypedKeyBeforeHandler,
+    );
+  }
   if (method === 'WEBSOCKET') {
     if (!live || updates || handler.generator) {
       fail('websocket requires a live room key and does not accept updates or a generator', statement);
@@ -217,6 +231,19 @@ function definedFunction(local: string, statement: Node, init: Node, fail: Fail)
     fail('live requires an ordinary GET; updates belongs to mutations', statement);
   }
   return { local, method, schemaInput, live, handler };
+}
+
+/**
+ * Whether an inline `live`/`updates` callback leaves a handler argument without a type. Its
+ * context needs none: only the arguments take their types from the handler.
+ */
+function takesUntypedArguments(value: Node): boolean {
+  const callback = unwrapType(value);
+  if (!is.FunctionExpression(callback) && !is.ArrowFunctionExpression(callback)) return false;
+  return callback.params.slice(1).some(parameter => {
+    const target = is.AssignmentPattern(parameter) ? parameter.left : parameter;
+    return !('typeAnnotation' in target) || target.typeAnnotation == null;
+  });
 }
 
 /** Each runtime export: its exported name, its local name, and where it is written. */

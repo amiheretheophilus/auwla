@@ -61,7 +61,6 @@ import { define } from '../define';
 
 const boards = new Map();
 export const openRoom = define.function({
-  live: (_context, room) => ['board', room],
   websocket(context, room: string, options = { prefix: '' }) {
     const viewer = context.state.viewer;
     let serializations = 0;
@@ -82,6 +81,7 @@ export const openRoom = define.function({
       },
     };
   },
+  live: (_context, room) => ['board', room],
 });
 `);
 

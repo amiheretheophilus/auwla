@@ -33,7 +33,11 @@ call each endpoint over HTTP, while the server build routes each endpoint to its
   module exports from its syntax alone: each `define.function({ get|post|put|patch|delete })`,
   its endpoint (`/_fn/<module>/<name>`), its method, and its transported parameters. A GET's go
   in the query, so each needs one scalar type. Any other export is an error, since it would cross
-  the client boundary.
+  the client boundary. An inline `live` or `updates` written before the handler, with an argument
+  left untyped, is an error asking to move it: TypeScript types an object literal's functions top
+  to bottom, so that argument settles as `unknown` before the handler's types exist, and no
+  signature in `define.ts` can change that (it already uses `NoInfer`). A typed argument, a
+  context-only key, or an `input` schema works in any order.
 - `serverFunctionClient(module)` (`server/generate.ts`) is the facade: the same names, calling
   `$fetch` (or a streaming or page source) with the parameters in the query or a JSON body.
 - `serverFunctionDeclarations(modules, resolve)` types the flat `#server-functions` barrel through
