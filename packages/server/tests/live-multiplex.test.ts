@@ -187,6 +187,34 @@ describe('multiplexed live server transport',()=>{
     expect(reports).toEqual([]);
   });
 
+  // `refresh`: the data changes in another system that never tells this server.
+  it('checks a refresh read while it is read, sends only changes, and survives a failed check',async()=>{
+    let outside=0,checks=0,failing=false;const reports:unknown[]=[];
+    const router=createServerRouter({onError(failure){reports.push(failure);return new Response('private',{status:500});},
+      routes:createServerFunctionRoutes([{
+        id:'status',path:'/_fn/status',method:'GET',parameters:[],live:()=>['status'],refresh:20,
+        handler(){checks++;if(failing)throw new Error('PRIVATE outside failure');return {outside,padding:'stable'.repeat(100)};},
+      }])});
+    const response=await router.fetch(request({revision:1,subscribe:[{id:'one',url:'/_fn/status',page:false}],unsubscribe:[]}));
+    const reader=response.body!.getReader();
+    try{
+      await read(reader);
+      expect(await read(reader)).toMatchObject({event:'value',data:{sub:'one',seq:1,value:{outside:0}}});
+      // Unchanged checks send nothing: the next frame is the change, right after the first value.
+      await waitFor(()=>expect(checks).toBeGreaterThan(3));
+      outside=1;
+      const changed=await read(reader);
+      expect(changed).toMatchObject({event:'patch',data:{sub:'one',base:1,seq:2}});
+      expect(JSON.stringify(changed.data.patch)).toContain('"value":1');
+      // A failed check keeps the read; the next one carries on.
+      failing=true;const before=checks;await waitFor(()=>expect(checks).toBeGreaterThan(before+1));
+      failing=false;outside=2;
+      expect(await read(reader)).toMatchObject({event:'patch',data:{sub:'one',base:2,seq:3}});
+      expect(reports.length).toBeGreaterThan(0);
+    }finally{await reader.cancel();}
+    const after=checks;await Bun.sleep(80);expect(checks).toBe(after);
+  });
+
   it('falls back before running queries when middleware needs ordinary HTTP response semantics',async()=>{
     let queries=0;const router=createServerRouter({routes:createServerFunctionRoutes([{
       id:'notes',path:'/_fn/notes',method:'GET',parameters:[],live:()=>['notes'],middleware:[async(_context,next)=>{const response=await next();response.headers.set('set-cookie','token=renewed; HttpOnly');return response;}],

@@ -168,12 +168,19 @@ export function createLiveSubscription(
   request: Request,
   query: (signal: AbortSignal) => Promise<unknown>,
   onError?: StreamErrorReporter,
+  /** The function's `refresh`, in milliseconds: how often to check a source that can't say it changed. */
+  refresh?: number,
 ): LiveSubscription {
   const abort = new AbortController();
   let dirty = true;
   let wake: (() => void) | undefined;
   let rendering: { updates: ServerPageUpdates; iterator: AsyncIterator<PageContent>; stamp: LiveStamp } | undefined;
   let committed = false;
+  // A refresh check reruns the read without a change being announced. Its reader gets a value
+  // only when the result differs from the last one it was sent, so nothing re-renders for nothing.
+  let recheck = false;
+  let delivered: string | undefined;
+  const checks = refresh === undefined ? undefined : setInterval(() => { recheck = true; wake?.(); }, refresh);
   const releaseRender = () => {
     const previous = rendering; rendering = undefined;
     previous?.updates.cancel();
@@ -182,10 +189,32 @@ export function createLiveSubscription(
   const stop = () => {
     if (abort.signal.aborted) return;
     abort.abort();
+    clearInterval(checks);
     disconnect();
     request.signal.removeEventListener('abort', stop);
     releaseRender();
     wake?.();
+  };
+  /**
+   * Rerun the read for `refresh`. The changed result to send, or undefined when there's nothing
+   * to send: the result is the same, a real change arrived meanwhile (its full read runs next),
+   * or the check failed. A failed check keeps the last value: the source is outside, and the
+   * next check tries again, so one bad answer from it doesn't end the read.
+   */
+  const refreshCheck = async (): Promise<LiveQueryValue | undefined> => {
+    const stamp = hub.stamp(key);
+    let value: unknown;
+    try { value = await query(abort.signal); }
+    catch (error) {
+      if (!abort.signal.aborted && liveRejection(error) === undefined) void reportStreamError(error, request, onError);
+      return undefined;
+    }
+    if (isServerPageUpdates(value)) { value.cancel(); dirty = true; return undefined; }
+    if (abort.signal.aborted || dirty || stamp.revision !== hub.stamp(key).revision) return undefined;
+    const json = JSON.stringify(value);
+    if (json === delivered) return undefined;
+    delivered = json;
+    return { value, stamp };
   };
   const disconnect = hub.subscribe(key, () => { dirty = true; rendering?.updates.cancel(); wake?.(); });
   request.signal.addEventListener('abort', stop, { once: true });
@@ -201,7 +230,8 @@ export function createLiveSubscription(
         };
         while (!abort.signal.aborted) {
           if (dirty) {
-            releaseRender(); dirty = false;
+            // A full read supersedes a pending refresh check.
+            releaseRender(); dirty = false; recheck = false;
             const stamp = hub.stamp(key);
             if (liveDiagnosticsEnabled()) reportLiveDiagnostic('query-started', { source: liveDiagnosticName(request.url), stamp });
             const value = await query(abort.signal);
@@ -214,7 +244,17 @@ export function createLiveSubscription(
               continue;
             }
             if (isServerPageUpdates(value)) rendering = { updates: value, iterator: value[Symbol.asyncIterator](), stamp };
-            else { committed = true; return deliver(value, stamp); }
+            else {
+              committed = true;
+              if (refresh !== undefined) delivered = JSON.stringify(value);
+              return deliver(value, stamp);
+            }
+          }
+          if (recheck && !rendering) {
+            recheck = false;
+            const checked = await refreshCheck();
+            if (checked !== undefined) return deliver(checked.value, checked.stamp);
+            continue;
           }
           if (rendering) {
             const current = rendering;
@@ -249,9 +289,10 @@ export function createLiveSubscription(
 export function liveResponse(hub: LiveHub, key: string, request: Request,
   query: (signal: AbortSignal) => Promise<unknown>, onError?: StreamErrorReporter,
   heartbeatInterval?: number,
+  refresh?: number,
 ): Response {
   const interval = resolveLiveHeartbeatInterval(heartbeatInterval);
-  const subscription=createLiveSubscription(hub,key,request,query,onError);
+  const subscription=createLiveSubscription(hub,key,request,query,onError,refresh);
   const version=request.headers.get('x-mmd-live-patches');
   const patches=version==='1'||version==='2'?new LivePatchEncoder(version==='2'):undefined;
   let pending:Promise<IteratorResult<LiveQueryValue>>|undefined;

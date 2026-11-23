@@ -167,6 +167,8 @@ export interface ServerFunctionRouteDefinition<
   readonly input?: StandardSchemaV1;
   readonly live?: (context: ServerContext<TLocals, TPlatform, TServices>, ...args: unknown[]) => LiveKey;
   readonly updates?: (context: ServerContext<TLocals, TPlatform, TServices>, ...args: unknown[]) => LiveKey;
+  /** How often, in milliseconds, a live read is checked while someone reads it. */
+  readonly refresh?: number;
   readonly handler: (
     context: ServerContext<TLocals, TPlatform, TServices>,
     ...args: unknown[]
@@ -177,7 +179,7 @@ export interface ServerSocketRouteDefinition<
   TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
-> extends Omit<ServerFunctionRouteDefinition<TLocals, TPlatform, TServices>, 'method' | 'handler' | 'live' | 'updates'> {
+> extends Omit<ServerFunctionRouteDefinition<TLocals, TPlatform, TServices>, 'method' | 'handler' | 'live' | 'updates' | 'refresh'> {
   readonly method: 'WEBSOCKET';
   readonly live: (context: ServerContext<TLocals, TPlatform, TServices>, ...args: unknown[]) => LiveKey;
   readonly handler: (
@@ -579,8 +581,8 @@ export function createServerFunctionRoutes<
             };
             const report=streamErrorReporters.get(context);
             return captureLiveResponse(context.request,run=>createLiveSubscription(hub,hub.key(key),context.request,
-              signal=>run(()=>query(signal),signal),report))??liveResponse(hub,hub.key(key),context.request,query,report,
-                Reflect.get(context,LIVE_HEARTBEAT_INTERVAL) as number|undefined);
+              signal=>run(()=>query(signal),signal),report,definition.refresh))??liveResponse(hub,hub.key(key),context.request,query,report,
+                Reflect.get(context,LIVE_HEARTBEAT_INTERVAL) as number|undefined,definition.refresh);
           }
           let cancellation = new AbortController();
           let value: unknown;

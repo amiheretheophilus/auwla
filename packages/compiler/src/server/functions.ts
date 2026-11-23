@@ -181,6 +181,7 @@ function definedFunction(local: string, statement: Node, init: Node, fail: Fail)
   let schemaInput = false;
   let live = false;
   let updates = false;
+  let refresh = false;
   let untypedKeyBeforeHandler: Extract<Node, { type: 'Property' }> | null = null;
   for (const property of (definition as Extract<Node, { type: 'ObjectExpression' }>).properties) {
     if (!is.Property(property) || property.computed) {
@@ -193,6 +194,10 @@ function definedFunction(local: string, statement: Node, init: Node, fail: Fail)
       continue;
     }
     if (name === 'middleware') continue;
+    if (name === 'refresh') {
+      refresh = true;
+      continue;
+    }
     if (name === 'live' || name === 'updates') {
       if (name === 'live') live = true;
       else updates = true;
@@ -229,6 +234,9 @@ function definedFunction(local: string, statement: Node, init: Node, fail: Fail)
     }
   } else if ((live && (method !== 'GET' || updates || handler.generator)) || (updates && method === 'GET')) {
     fail('live requires an ordinary GET; updates belongs to mutations', statement);
+  }
+  if (refresh && (!live || method === 'WEBSOCKET')) {
+    fail('refresh needs a live GET: it keeps a live read fresh while someone reads it', statement);
   }
   return { local, method, schemaInput, live, handler };
 }

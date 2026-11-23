@@ -114,6 +114,7 @@ export {
   type DefinitionPlatform,
   type DefinitionState,
   type ServerDefinition,
+  type LiveRefresh,
   type ServerFunctionArguments,
   type ServerFunctionDescriptor,
   type ServerFunctionInputDescriptor,

@@ -130,6 +130,7 @@ export function serverFunctionRegistry(
         input: ${own}.input,
         live: ${own}.live,
         updates: ${own}.updates,
+        refresh: ${own}.refresh,
         handler: ${own}.handler
       }`);
     }

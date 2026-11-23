@@ -114,6 +114,14 @@ type CallbackFirstCheck = Assert<Equal<ServerFunctionArguments<typeof callbackFi
 // can't get the handler's types: TypeScript types the object top to bottom and settles them as
 // unknown at `live`. No signature changes that, so the compiler rejects that one order with a
 // message to move it (packages/compiler/src/server/functions.ts, takesUntypedArguments).
+const refreshed = define.function({
+  async get(_context, reference: string) { return { reference }; },
+  live: (_context, reference) => ['tracking', reference],
+  refresh: '30s',
+});
+type RefreshArgumentsCheck = Assert<Equal<ServerFunctionArguments<typeof refreshed>, [reference: string]>>;
+// @ts-expect-error refresh takes a duration in seconds or minutes.
+define.function({ async get() { return 1; }, live: () => ['a'], refresh: 30 });
 const streamed = define.function({ async *post(_context, prompt: string) { yield prompt; yield prompt + '!'; return undefined; } });
 type StreamResultCheck = Assert<Equal<ServerFunctionResult<typeof streamed>, string>>;
 const validatedLive = define.function({

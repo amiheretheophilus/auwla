@@ -32,6 +32,21 @@ export interface DefinedServerFunction<
   readonly input?: StandardSchemaV1;
   readonly live?: (context: ServerContext<TState, TPlatform, TServices>, ...args: THandlerArguments) => LiveKey;
   readonly updates?: (context: ServerContext<TState, TPlatform, TServices>, ...args: THandlerArguments) => LiveKey;
+  /** `refresh`, in milliseconds. */
+  readonly refresh?: number;
+}
+
+/** How often to check a live read whose data changes where the server isn't told: `'30s'`, `'5m'`. */
+export type LiveRefresh = `${number}s` | `${number}m`;
+
+/** `'30s'` → 30000. At least a second, so a typo can't turn into a request storm. */
+function refreshMilliseconds(value: unknown): number {
+  const match = typeof value === 'string' ? /^(\d+(?:\.\d+)?)(s|m)$/.exec(value) : null;
+  const milliseconds = match === null ? NaN : Number(match[1]) * (match[2] === 'm' ? 60_000 : 1000);
+  if (!(milliseconds >= 1000)) {
+    throw new TypeError(`memo-dom: refresh takes a duration like '30s' or '5m', at least '1s' (got ${JSON.stringify(value)})`);
+  }
+  return milliseconds;
 }
 
 export type ServerFunctionArguments<TFunction> =
@@ -82,6 +97,12 @@ type FunctionInvalidation<TState extends object, TPlatform, TServices extends ob
   readonly live?: (context: ServerContext<TState, TPlatform, TServices>, ...args: { [K in keyof TArguments]: NoInfer<TArguments[K]> }) => LiveKey;
   /** Invalidate a key and related active queries after success; arguments follow the handler's positional order. */
   readonly updates?: (context: ServerContext<TState, TPlatform, TServices>, ...args: { [K in keyof TArguments]: NoInfer<TArguments[K]> }) => LiveKey;
+  /**
+   * With `live`: while someone reads it, rerun the read this often on the server, and send
+   * readers the result only when it changed. For data another system changes without telling
+   * this server.
+   */
+  readonly refresh?: LiveRefresh;
 };
 
 type ServerFunctionVerb = 'get' | 'post' | 'put' | 'patch' | 'delete';
@@ -126,6 +147,7 @@ type SocketDescriptor<
   readonly live: NonNullable<FunctionInvalidation<TState, TPlatform, TServices, TArguments>['live']>;
   readonly middleware?: readonly ServerMiddleware<TState, TPlatform, TServices>[];
   readonly updates?: never;
+  readonly refresh?: never;
 } & { readonly [Key in ServerFunctionVerb]?: never };
 
 export type ServerFunctionInputDescriptor<
@@ -315,6 +337,9 @@ function createFunctionDefinition<
       (descriptor.updates !== undefined && typeof descriptor.updates !== 'function')) {
       throw new TypeError('memo-dom: live and updates must be key callbacks');
     }
+    if (descriptor.refresh !== undefined && descriptor.live === undefined) {
+      throw new TypeError('memo-dom: refresh needs a live key: it keeps a live read fresh while someone reads it');
+    }
     return Object.freeze({
       method: method.toUpperCase() as ServerFunctionMethod,
       handler,
@@ -322,6 +347,7 @@ function createFunctionDefinition<
       ...(descriptor.input === undefined ? {} : { input: descriptor.input }),
       ...(descriptor.live === undefined ? {} : { live: descriptor.live }),
       ...(descriptor.updates === undefined ? {} : { updates: descriptor.updates }),
+      ...(descriptor.refresh === undefined ? {} : { refresh: refreshMilliseconds(descriptor.refresh) }),
     }) as unknown as DefinedServerFunction<
       TArguments,
       TResult,

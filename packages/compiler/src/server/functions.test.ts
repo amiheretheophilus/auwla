@@ -121,6 +121,8 @@ describe('server functions', () => {
     ['export const a = define.function({ async get(_c, ids: { id: string }) {} });', "parameter 'ids' must use one string, number, or boolean query type"],
     ['export const a = define.function({ input: s, async get(_c, a, b) {} });', 'at most one schema-owned input'],
     ['export const a = define.function({ live: true, async post() {} });', 'live requires an ordinary GET'],
+    ["export const a = define.function({ async get() {}, refresh: '30s' });", 'refresh needs a live GET'],
+    ["export const a = define.function({ async websocket() {}, live: () => ['a'], refresh: '30s' });", 'refresh needs a live GET'],
     ["export const a = define.function({ live: (c, id) => ['a', id], async get(_c, id: string) {} });",
       "move 'live' after 'get'"],
     ["export const a = define.function({ updates: (c, id) => ['a', id], async post(_c, id: string) {} });",
@@ -140,6 +142,7 @@ describe('server functions', () => {
       "export const a = define.function({ input: s, live: (c, input) => ['a', input.id], async get(_c, input) {} });",
       "export const a = define.function({ live: keyOf, async get(_c, id: string) {} });",
       "export const a = define.function({ async get(_c, id: string) {}, live: (c, id) => ['a', id] });",
+      "export const a = define.function({ async get() {}, live: () => ['a'], refresh: '30s' });",
     ]) {
       expect(() => analyzeServerFunctions('server/functions/good.ts', source)).not.toThrow();
     }

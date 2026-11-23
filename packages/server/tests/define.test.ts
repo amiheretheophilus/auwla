@@ -20,6 +20,22 @@ describe('createDefine', () => {
     // @ts-expect-error Intentionally invalid multi-method definition.
     expect(() => define.function({ async get() {}, async post() {} })).toThrow('exactly one HTTP method');
   });
+  it('reads refresh as a duration on a live GET', () => {
+    const define = createDefine();
+    const live = (refresh: unknown) => define.function({
+      async get() { return 1; },
+      live: () => ['status'],
+      refresh: refresh as '30s',
+    });
+    expect(live('30s').refresh).toBe(30_000);
+    expect(live('1.5s').refresh).toBe(1500);
+    expect(live('5m').refresh).toBe(300_000);
+    for (const wrong of ['500ms', '0.5s', '30', 30, 'soon']) {
+      expect(() => live(wrong)).toThrow("refresh takes a duration like '30s' or '5m'");
+    }
+    // The build reports this too (packages/compiler/src/server/functions.ts).
+    expect(() => define.function({ async get() { return 1; }, refresh: '30s' })).toThrow('refresh needs a live key');
+  });
   it('shares request state through middleware and handlers', async () => {
     interface State { requestId: string; user?: string }
     const define = createDefine<State>();

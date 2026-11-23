@@ -109,6 +109,25 @@ describe('transparent live multiplexing',()=>{
     }
   });
 
+  it('updates a refresh read in the browser when the outside data changes, on every transport',async()=>{
+    let outside='pending';
+    const router=createServerRouter({services:{},routes:createServerFunctionRoutes([{
+      id:'status',path:'/_fn/status',method:'GET',parameters:[],live:()=>['status'],refresh:20,handler:async()=>({outside}),
+    }])});
+    for(const shared of [true,false]){
+      outside='pending';
+      const runtime=createDataRuntime({baseURL:'https://app.test',fetch:async(input,init)=>{
+        if(!shared&&String(input).endsWith('/_memoized/live'))return new Response(null,{status:404});
+        return router.fetch(new Request(input,init));
+      }});runtimes.push(runtime);
+      const status=runWithDataRuntime(runtime,()=>createStreamingSource<{outside:string}>('/_fn/status',{},'live')) as unknown as FetchResource<{outside:string}>;
+      await waitFor(()=>expect(status.data?.outside).toBe('pending'));
+      outside='verified';
+      await waitFor(()=>expect(status.data?.outside).toBe('verified'));
+      disposeFetchResource(status);
+    }
+  });
+
   it('falls back to direct live SSE when the multiplex endpoint is unavailable',async()=>{
     let probes=0,direct=0;const controllers:ReadableStreamDefaultController<Uint8Array>[]=[];
     const runtime=createDataRuntime({baseURL:'https://old.test',fetch:async(input)=>{
