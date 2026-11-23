@@ -11,7 +11,7 @@ import {
   type RoutedServerContext,
 } from '@memoized-dom/router/internal';
 import type { StandardSchemaV1 } from '@memoized-dom/data';
-import { generatorResponse, liveHub, liveResponse, type LiveKey, type LiveStamp } from './live';
+import { generatorResponse, liveHub, liveQueryRejection, liveResponse, type LiveKey, type LiveStamp } from './live';
 import { isServerPage } from './page-definition';
 import { captureLiveResponse, createLiveSessions, createLiveSubscription, LIVE_SESSION_PATH } from './live-session';
 import { socketUpgrade } from './websocket/upgrade';
@@ -572,7 +572,7 @@ export function createServerFunctionRoutes<
               const liveContext = { ...context, request };
               const result = await serverFunctionValue(await definition.handler(liveContext, ...args), liveContext, context);
               if (result instanceof Response) {
-                if (!result.ok) { await result.body?.cancel(); throw new Error('Live query rejected'); }
+                if (!result.ok) throw await liveQueryRejection(result);
                 return result.headers.get('content-type')?.includes('json') ? result.json() : result.text();
               }
               return result;

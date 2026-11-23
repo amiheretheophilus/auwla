@@ -35,6 +35,19 @@ export class RequestError<TData = unknown> extends Error {
   }
 }
 
+/**
+ * The error a stream's `error` frame stands for. When the server function returned
+ * `error(data, { status })`, the frame carries its status and body, and the reader gets the
+ * same error a plain GET would: the body's message, the status and the data.
+ */
+export function liveFrameError(frame: Record<string, unknown>, fallback: string): RequestError {
+  return new RequestError(typeof frame.message === 'string' ? frame.message : fallback, {
+    kind: 'http',
+    status: typeof frame.status === 'number' ? frame.status : undefined,
+    data: frame.data,
+  });
+}
+
 export function isAbortError(error: unknown): boolean {
   return (
     error instanceof DOMException

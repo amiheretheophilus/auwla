@@ -1,5 +1,5 @@
 import { getActiveEnvironment } from '@memoized-dom/runtime';
-import { RequestError } from './errors';
+import { RequestError, liveFrameError } from './errors';
 import { abortable } from './request';
 import { liveStamp } from './live-protocol';
 import { applyLivePatch, type LiveJsonValue } from './live-patch';
@@ -137,7 +137,7 @@ export function multiplexTransport(environment:FetchEnvironment,runtime:CoreData
       slot.chain=slot.chain.then(async()=>{
         if(this.generation!==generation||this.slots.get(id)!==slot||slot.id!==id||signal.aborted)return;
         if(event==='fallback'){this.fallback(slot);return;}
-        if(event==='error')throw new RequestError(typeof frame.message==='string'?frame.message:'Live query failed',{kind:'http',status:typeof frame.status==='number'?frame.status:undefined});
+        if(event==='error')throw liveFrameError(frame,'Live query failed');
         const stamp=liveStamp(frame.stamp);if(!stamp)throw new StreamProtocolError('Missing live query cursor');
         if(event==='value'){
           if(!Object.hasOwn(frame,'value'))throw new StreamProtocolError('Missing streaming value');

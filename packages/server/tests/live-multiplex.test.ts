@@ -1,6 +1,7 @@
 import {describe,expect,it} from 'bun:test';
 import {createServerFunctionRoutes,createServerRouter} from '../src/http-router';
 import {liveHub} from '../src/live';
+import {error} from '../src/error';
 import {waitFor} from '../../../test-support/helpers';
 
 const origin='https://app.test',path=origin+'/_memoized/live';
@@ -159,6 +160,31 @@ describe('multiplexed live server transport',()=>{
       try{await read(reader);expect(await read(reader)).toMatchObject({event,data:{sub:'one'}});expect(queries).toBe(0);}
       finally{await reader.cancel();}
     }
+  });
+
+  it('sends the error() a live read or its middleware returns, without reporting it as a server failure',async()=>{
+    const reports:unknown[]=[];
+    const router=createServerRouter({onError(failure){reports.push(failure);return new Response('private',{status:500});},
+      routes:createServerFunctionRoutes([
+        {id:'tracking',path:'/_fn/tracking',method:'GET',parameters:[],live:()=>['tracking'],
+          handler:async()=>error({message:'Tracking temporarily unavailable'},{status:503})},
+        {id:'private',path:'/_fn/private',method:'GET',parameters:[],live:()=>['private'],
+          middleware:[()=>error({message:'Sign in to continue.'},{status:401})],handler:()=>1},
+      ])});
+    const response=await router.fetch(request({revision:1,subscribe:[
+      {id:'tracking',url:'/_fn/tracking',page:false},{id:'private',url:'/_fn/private',page:false},
+    ],unsubscribe:[]}));const reader=response.body!.getReader();
+    try{
+      await read(reader);
+      const frames=[await read(reader),await read(reader)];
+      expect(frames.find(frame=>frame.data.sub==='tracking')).toEqual({event:'error',data:{
+        sub:'tracking',message:'Tracking temporarily unavailable',status:503,data:{message:'Tracking temporarily unavailable'},
+      }});
+      expect(frames.find(frame=>frame.data.sub==='private')).toEqual({event:'error',data:{
+        sub:'private',message:'Sign in to continue.',status:401,data:{message:'Sign in to continue.'},
+      }});
+    }finally{await reader.cancel();}
+    expect(reports).toEqual([]);
   });
 
   it('falls back before running queries when middleware needs ordinary HTTP response semantics',async()=>{

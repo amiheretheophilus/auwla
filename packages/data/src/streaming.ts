@@ -3,7 +3,7 @@ import { getActiveDataRuntime } from './active-runtime';
 import { installActiveDataRestoration } from './active-restoration';
 import { enableRequestEncoding } from './request-encoding';
 import { fetchStoreForRuntime } from './runtime-core';
-import { RequestError, isAbortError } from './errors';
+import { RequestError, isAbortError, liveFrameError } from './errors';
 import { liveStamp, updateStamps, type LiveStamp } from './live-protocol';
 import { applyLivePatch, type LiveJsonValue } from './live-patch';
 import { decodeResponse } from './request';
@@ -177,7 +177,7 @@ function transport(environment: FetchEnvironment, runtime: CoreDataRuntime): Non
             delivery.state(false);
             terminal = true;
           } else if (event === 'error') {
-            throw new RequestError(typeof frame.message === 'string' ? frame.message : 'Streaming function failed', { kind: 'http' });
+            throw liveFrameError(frame, 'Streaming function failed');
           } else throw new StreamProtocolError(`Unknown streaming event '${event}'`);
           event = '';
           // A server render consumes the current page generation, not an

@@ -6,6 +6,7 @@ import {protectLiveSources} from '../src/source-protection';
 import type {FetchOptions,FetchResource,StandardSchemaV1} from '../src/types';
 import {createServerFunctionRoutes,createServerRouter} from '../../server/src/http-router';
 import {liveHub} from '../../server/src/live';
+import {error} from '../../server/src/error';
 import {waitFor} from '../../../test-support/helpers';
 
 const runtimes:ReturnType<typeof createDataRuntime>[]=[];
@@ -84,6 +85,28 @@ describe('transparent live multiplexing',()=>{
     expect(requests.every(request=>request.headers.get('x-mmd-multiplex')==='1')).toBe(true);
     count=1;hub.invalidate(['value']);await waitFor(()=>expect(value.data?.count).toBe(1));
     disposeFetchResource(value);await waitFor(()=>expect(Reflect.get(hub,'listeners').size).toBe(0));
+  });
+
+  // A reader must tell "the service is unavailable" from "not found", whichever way it reads.
+  it('gives a live read the status and message of the error() it returned, on every transport',async()=>{
+    const services={};
+    const router=createServerRouter({services,routes:createServerFunctionRoutes([{
+      id:'tracking',path:'/_fn/tracking',method:'GET',parameters:[],live:()=>['tracking'],
+      handler:async()=>error({message:'Tracking temporarily unavailable',retry:true},{status:503}),
+    }])});
+    const plain=await router.fetch(new Request('https://app.test/_fn/tracking'));
+    expect(plain.status).toBe(503);
+    for(const shared of [true,false]){
+      const runtime=createDataRuntime({baseURL:'https://app.test',fetch:async(input,init)=>{
+        if(!shared&&String(input).endsWith('/_memoized/live'))return new Response(null,{status:404});
+        return router.fetch(new Request(input,init));
+      }});runtimes.push(runtime);
+      const tracking=runWithDataRuntime(runtime,()=>createStreamingSource('/_fn/tracking',{},'live')) as unknown as FetchResource<unknown>;
+      await waitFor(()=>expect(resourceController(tracking).snapshot.error).not.toBeNull());
+      expect(resourceController(tracking).snapshot.error).toMatchObject({
+        message:'Tracking temporarily unavailable',status:503,data:{message:'Tracking temporarily unavailable',retry:true},
+      });
+    }
   });
 
   it('falls back to direct live SSE when the multiplex endpoint is unavailable',async()=>{

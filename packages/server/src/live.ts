@@ -21,6 +21,49 @@ export async function reportStreamError(error: unknown, request: Request, report
   }
 }
 
+// The native host and generated routes can load separate module instances, so a brand on
+// the error, not `instanceof`, recognizes a rejection.
+const REJECTION = Symbol.for('memoized-dom:live-query-rejection');
+
+/** What an `error()` returned by a live read tells its reader, as a plain GET would. */
+export interface LiveRejection { readonly message: string; readonly status: number; readonly data: unknown }
+
+/**
+ * A live read answered with an error response, such as `error({ message }, { status: 503 })`.
+ * Its status and body are public, exactly as on a plain GET, and it isn't a server failure, so
+ * it isn't reported as one.
+ */
+export async function liveQueryRejection(response: Response): Promise<Error> {
+  const data: unknown = response.headers.get('content-type')?.includes('json')
+    ? await response.json().catch(() => undefined)
+    : await response.text().then(text => text === '' ? undefined : text, () => undefined);
+  const explained = data !== null && typeof data === 'object' &&
+    typeof (data as { message?: unknown }).message === 'string' &&
+    (data as { message: string }).message.trim() !== ''
+    ? (data as { message: string }).message : null;
+  const rejection: LiveRejection = {
+    message: explained ?? `Request failed with status ${response.status}`,
+    status: response.status,
+    data,
+  };
+  return Object.defineProperty(new Error(rejection.message), REJECTION, { value: rejection });
+}
+
+/** The public fields of a rejection, or undefined for an ordinary failure, which stays private. */
+export function liveRejection(error: unknown): LiveRejection | undefined {
+  return error !== null && typeof error === 'object'
+    ? Reflect.get(error, REJECTION) as LiveRejection | undefined
+    : undefined;
+}
+
+/** An error frame's fields: a rejection's public status, message and body, or nothing private. */
+export function liveErrorFields(error: unknown): Record<string, unknown> {
+  const rejection = liveRejection(error);
+  return rejection === undefined
+    ? { message: 'Live query failed' }
+    : { message: rejection.message, status: rejection.status, data: rejection.data };
+}
+
 export class LiveHub {
   readonly epoch = crypto.randomUUID();
   private readonly revisions = new Map<string, number>();
@@ -195,7 +238,7 @@ export function createLiveSubscription(
         const failed = !abort.signal.aborted;
         stop();
         if (!failed) return {done:true,value:undefined};
-        void reportStreamError(error,request,onError);
+        if (liveRejection(error) === undefined) void reportStreamError(error,request,onError);
         throw error;
       }
     },
@@ -232,8 +275,8 @@ export function liveResponse(hub: LiveHub, key: string, request: Request,
         const {value,stamp}=next.value;
         try{controller.enqueue(patches?patches.encode(value,stamp):frame('value',{value,stamp}));}
         catch(error){subscription.fail(error);throw error;}
-      }catch{
-        if(!stopped){controller.enqueue(frame('error',{message:'Live query failed'}));controller.close();}
+      }catch(error){
+        if(!stopped){controller.enqueue(frame('error',liveErrorFields(error)));controller.close();}
         stop();
       }
     },cancel:stop,

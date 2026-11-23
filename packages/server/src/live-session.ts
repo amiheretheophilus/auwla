@@ -1,5 +1,5 @@
 /** Private, process-local multiplexed SSE sessions. Never a general request proxy. */
-import { createLiveSubscription, type LiveSubscription } from './live';
+import { createLiveSubscription, liveErrorFields, liveQueryRejection, type LiveSubscription } from './live';
 import { encodeLiveFrame, LivePatchEncoder } from './live-patch';
 import { resolveLiveHeartbeatInterval } from './live-heartbeat';
 
@@ -131,10 +131,10 @@ export function createLiveSessions(
         if(next.done){this.remove(id);return;}
         try{this.enqueue(id,slot.encoder.encode(next.value.value,next.value.stamp,id));}
         catch(error){slot.engine!.fail(error);throw error;}
-      }).catch(()=>{
+      }).catch(error=>{
         slot.pending=false;
         if(this.slots.get(id)!==slot)return;
-        slot.terminal=true;this.enqueue(id,encodeLiveFrame('error',{sub:id,message:'Live query failed'}));
+        slot.terminal=true;this.enqueue(id,encodeLiveFrame('error',{sub:id,...liveErrorFields(error)}));
       });
     }
     add(item:Descriptor){
@@ -152,10 +152,14 @@ export function createLiveSessions(
         if(slot.abort.signal.aborted){await response.body?.cancel();return;}
         const factory=sharedStreamFactory(response,capture);
         if(!factory){
-          slot.terminal=true;await response.body?.cancel();
-          this.enqueue(item.id,response.status>=400
-            ?encodeLiveFrame('error',{sub:item.id,message:'Live subscription rejected',status:response.status})
-            :encodeLiveFrame('fallback',{sub:item.id,message:'Live subscription needs its own stream',status:response.status}));
+          slot.terminal=true;
+          // An error middleware answered with is public, as it is on a plain GET or a direct stream.
+          if(response.status>=400){
+            this.enqueue(item.id,encodeLiveFrame('error',{sub:item.id,...liveErrorFields(await liveQueryRejection(response))}));
+            return;
+          }
+          await response.body?.cancel();
+          this.enqueue(item.id,encodeLiveFrame('fallback',{sub:item.id,message:'Live subscription needs its own stream',status:response.status}));
           return;
         }
         slot.engine=factory(this.run);this.arm(item.id,slot);
