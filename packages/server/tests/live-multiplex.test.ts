@@ -133,6 +133,34 @@ describe('multiplexed live server transport',()=>{
     expect((await router.fetch(request({session,revision:2,subscribe:[],unsubscribe:[]}))).status).toBe(409);
   });
 
+  it('keeps a subscription on the shared stream when middleware adds headers or rebuilds the response',async()=>{
+    const mutate:Parameters<typeof createServerRouter>[0]['middleware']=[async(_context,next)=>{const response=await next();response.headers.set('x-frame-options','DENY');return response;}];
+    const rebuild:typeof mutate=[async(_context,next)=>{
+      const response=await next();const headers=new Headers(response.headers);headers.set('cache-control','private, no-store');
+      return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
+    }];
+    for(const middleware of [mutate,rebuild]){
+      const router=createServerRouter({middleware,routes:createServerFunctionRoutes([{
+        id:'notes',path:'/_fn/notes',method:'GET',parameters:[],live:()=>['notes'],handler:()=>7,
+      }])});
+      const response=await router.fetch(request({revision:1,subscribe:[{...descriptor('one'),url:'/_fn/notes'}],unsubscribe:[]}));const reader=response.body!.getReader();
+      try{await read(reader);expect(await read(reader)).toMatchObject({event:'value',data:{sub:'one',value:7}});}
+      finally{await reader.cancel();}
+    }
+  });
+
+  it('sends a subscription that middleware answers itself, or fails, to the browser as such',async()=>{
+    const answers:[Response,string][]=[[new Response('cached',{status:200}),'fallback'],[new Response(null,{status:302,headers:{location:'/sign-in'}}),'fallback'],[new Response('no',{status:401}),'error']];
+    for(const [answer,event] of answers){
+      let queries=0;const router=createServerRouter({middleware:[async()=>answer.clone()],routes:createServerFunctionRoutes([{
+        id:'notes',path:'/_fn/notes',method:'GET',parameters:[],live:()=>['notes'],handler(){queries++;return 1;},
+      }])});
+      const response=await router.fetch(request({revision:1,subscribe:[{...descriptor('one'),url:'/_fn/notes'}],unsubscribe:[]}));const reader=response.body!.getReader();
+      try{await read(reader);expect(await read(reader)).toMatchObject({event,data:{sub:'one'}});expect(queries).toBe(0);}
+      finally{await reader.cancel();}
+    }
+  });
+
   it('falls back before running queries when middleware needs ordinary HTTP response semantics',async()=>{
     let queries=0;const router=createServerRouter({routes:createServerFunctionRoutes([{
       id:'notes',path:'/_fn/notes',method:'GET',parameters:[],live:()=>['notes'],middleware:[async(_context,next)=>{const response=await next();response.headers.set('set-cookie','token=renewed; HttpOnly');return response;}],

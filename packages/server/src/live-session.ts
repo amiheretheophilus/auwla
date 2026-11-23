@@ -23,6 +23,18 @@ export function captureLiveResponse(request:Request, factory:Factory):Response|u
 // Keep the engine constructor available here without exposing an authored transport API.
 export { createLiveSubscription };
 
+/**
+ * Whether a subscription's response lets it run on the shared stream. The live function must
+ * have accepted it (its factory is captured), and middleware may wrap or rebuild that response
+ * and add headers: security headers and cache rules mean nothing inside the shared stream, and
+ * forcing each such read onto its own connection exhausts the browser's per-site limit. A
+ * response the browser must see stays direct: an error or a redirect, a body that replaced the
+ * handoff, or a cookie to set.
+ */
+function sharedStreamFactory(response:Response,capture:Capture):Factory|undefined {
+  return response.ok&&response.body===null&&!response.headers.has('set-cookie')?capture.factory:undefined;
+}
+
 interface Descriptor { id:string; url:string; page:boolean }
 interface Control { session?:string; revision:number; subscribe:Descriptor[]; unsubscribe:string[]; contentType?:string }
 interface Slot { abort:AbortController; engine?:LiveSubscription; encoder:LivePatchEncoder; pending:boolean; terminal:boolean }
@@ -138,13 +150,15 @@ export function createLiveSessions(
       void dispatch(request,this.platform).then(async response=>{
         Reflect.deleteProperty(request,CAPTURE);
         if(slot.abort.signal.aborted){await response.body?.cancel();return;}
-        if(response!==capture.response||[...response.headers].length>0||!capture.factory){
+        const factory=sharedStreamFactory(response,capture);
+        if(!factory){
           slot.terminal=true;await response.body?.cancel();
-          this.enqueue(item.id,encodeLiveFrame(response.status>=400?'error':'fallback',{
-            sub:item.id,message:'Live subscription rejected',status:response.status,
-          }));return;
+          this.enqueue(item.id,response.status>=400
+            ?encodeLiveFrame('error',{sub:item.id,message:'Live subscription rejected',status:response.status})
+            :encodeLiveFrame('fallback',{sub:item.id,message:'Live subscription needs its own stream',status:response.status}));
+          return;
         }
-        slot.engine=capture.factory(this.run);this.arm(item.id,slot);
+        slot.engine=factory(this.run);this.arm(item.id,slot);
       }).catch(()=>{
         Reflect.deleteProperty(request,CAPTURE);slot.terminal=true;
         this.enqueue(item.id,encodeLiveFrame('error',{sub:item.id,message:'Live subscription failed'}));

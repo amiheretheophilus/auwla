@@ -62,6 +62,30 @@ describe('transparent live multiplexing',()=>{
     await runtime.settle();expect(requests).toHaveLength(2);expect(ada.data?.user).toBe('Ada');expect(grace.data?.user).toBe('Grace');
   });
 
+  // Apps commonly add security headers by rebuilding every response. The live read must still
+  // reach the browser, with no knowledge of how a live subscription is handed over.
+  it('delivers live reads through middleware that rebuilds every response with added headers',async()=>{
+    const services={},hub=liveHub(services);let count=0;
+    const router=createServerRouter({services,
+      middleware:[async(_context,next)=>{
+        const response=await next();const headers=new Headers(response.headers);
+        headers.set('x-frame-options','DENY');headers.set('cache-control','private, no-store');
+        return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
+      }],
+      routes:createServerFunctionRoutes([{
+        id:'value',path:'/_fn/value',method:'GET',parameters:[],live:()=>['value'],handler:()=>({count}),
+      }])});
+    const requests:Request[]=[];
+    const runtime=createDataRuntime({baseURL:'https://app.test',fetch:async(input,init)=>{const request=new Request(input,init);requests.push(request);return router.fetch(request);}});runtimes.push(runtime);
+    const value=runWithDataRuntime(runtime,()=>createStreamingSource<{count:number}>('/_fn/value',{},'live')) as unknown as FetchResource<{count:number}>;
+    await runtime.settle();
+    expect(resourceController(value).snapshot.error).toBeNull();expect(value.data?.count).toBe(0);
+    // It stays on the shared stream: a connection per live read runs out of the browser's per-site limit.
+    expect(requests.every(request=>request.headers.get('x-mmd-multiplex')==='1')).toBe(true);
+    count=1;hub.invalidate(['value']);await waitFor(()=>expect(value.data?.count).toBe(1));
+    disposeFetchResource(value);await waitFor(()=>expect(Reflect.get(hub,'listeners').size).toBe(0));
+  });
+
   it('falls back to direct live SSE when the multiplex endpoint is unavailable',async()=>{
     let probes=0,direct=0;const controllers:ReadableStreamDefaultController<Uint8Array>[]=[];
     const runtime=createDataRuntime({baseURL:'https://old.test',fetch:async(input)=>{
